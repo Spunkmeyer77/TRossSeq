@@ -26,7 +26,7 @@ const juce::Colour cream1      { 0xffe7e5dc }, cream2 { 0xffc9c7bd };
 const juce::Colour grey1       { 0xffa9a7a0 }, grey2  { 0xff8f8d86 };
 const juce::Colour orange1     { 0xffe0531f }, orange2 { 0xffc2410f };
 const juce::Colour yellow1     { 0xfff0b23a }, yellow2 { 0xffd6951a };
-const juce::Colour muteOn      { 0xffffcf4a };
+const juce::Colour muteOn      { 0xffffcf4a }, soloOn { 0xff4f9ef0 };
 const juce::Colour lcdBg       { 0xff1a1712 }, lcdText { 0xffff6a2b };
 const juce::Colour okGreen     { 0xff3f8f3a };
 }
@@ -73,7 +73,7 @@ constexpr int kMargin = 18, kTopH = 124, kSeqY = 127;
 constexpr int kMasterX = 984, kMasterW = 118;
 
 // lower section, in StepGrid coordinates (the grid sits at 0, kSeqY)
-constexpr float kGridX = 104.0f, kGridR = 690.0f, kColGap = 5.0f, kPadTop = 46.0f, kRowPitch = 22.0f, kPadH = 17.0f;
+constexpr float kGridX = 104.0f, kGridR = 690.0f, kColGap = 5.0f, kPadTop = 46.0f, kRowPitch = 20.0f, kPadH = 16.0f;
 constexpr float kColW = (kGridR - kGridX - 15 * kColGap) / 16.0f;
 constexpr int kNameX = 18, kNameW = 78;
 constexpr int kNoteX = 700, kNoteW = 54, kChanX = 760, kChanW = 32, kMuteX = 798, kMuteW = 24, kLearnX = 828, kLearnW = 44;
@@ -160,12 +160,13 @@ void SeqLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b, c
     if (style == "rubber" || style == "rubberDark")   // small buttons
     {
         r = r.withTrimmedBottom (1.0f);
-        const auto onColour = juce::Colour ((juce::uint32) (juce::int64) b.getProperties()["onColour"]);
+        const bool soloHeld = b.getProperties().contains ("soloHeld");   // Shift-held M button
+        const auto onColour = soloHeld ? col::soloOn : juce::Colour ((juce::uint32) (juce::int64) b.getProperties()["onColour"]);
         const bool dark = style == "rubberDark";
         const auto offTop = dark ? juce::Colour (0xff5a5a56) : juce::Colour (0xffefefea);
         const auto offBot = dark ? juce::Colour (0xff42423f) : juce::Colour (0xffcfcfc9);
-        const auto top = on ? onColour.brighter (0.15f) : offTop;
-        const auto bot = on ? onColour.darker (0.1f) : offBot;
+        const auto top = on || soloHeld ? onColour.brighter (0.15f) : offTop;
+        const auto bot = on || soloHeld ? onColour.darker (0.1f) : offBot;
         g.setColour (juce::Colours::black.withAlpha (0.4f));
         g.fillRoundedRectangle (r.translated (0, 1.0f), 3.0f);
         g.setGradientFill (juce::ColourGradient (top.brighter (highlighted ? 0.05f : 0.0f), 0, r.getY(), bot, 0, r.getBottom(), false));
@@ -193,7 +194,8 @@ void SeqLookAndFeel::drawButtonText (juce::Graphics& g, juce::TextButton& b, boo
     if (style == "rubber" || style == "rubberDark")
     {
         const bool dark = style == "rubberDark";
-        g.setColour (on ? (dark ? juce::Colour (0xff1d1d1d) : juce::Colour (0xff222222)) : (dark ? col::rowText : juce::Colour (0xff333333)));
+        if (b.getProperties().contains ("soloHeld")) g.setColour (juce::Colours::white);
+        else g.setColour (on ? (dark ? juce::Colour (0xff1d1d1d) : juce::Colour (0xff222222)) : (dark ? col::rowText : juce::Colour (0xff333333)));
         g.setFont (font (8.5f, true, 0.04f));
         if (b.getProperties().contains ("led")) r = r.withTrimmedLeft (12);
         g.drawText (b.getButtonText(), r.withTrimmedBottom (1).translated (0, down ? 1 : 0), juce::Justification::centred);
@@ -376,9 +378,16 @@ void NameStrip::paint (juce::Graphics& g)
     const auto bg = last != 0 && t < 1.0f ? flash.interpolatedWith (col::stripBg, t) : col::stripBg;
     g.setColour (bg);
     g.fillRoundedRectangle (r, 2.0f);
-    g.setColour (bg.getPerceivedBrightness() > 0.5f ? col::stripBg : col::stripText);
+    const int solo = proc.momentarySolo.load();
+    const bool silenced = solo >= 0 && solo != track;   // another track is held solo
+    g.setColour ((bg.getPerceivedBrightness() > 0.5f ? col::stripBg : col::stripText).withAlpha (silenced ? 0.3f : 1.0f));
     g.setFont (font (10.0f, true, 0.1f));
     g.drawText (proc.getTrackName (track), getLocalBounds(), juce::Justification::centred);
+    if (solo == track)
+    {
+        g.setColour (col::soloOn);
+        g.drawRoundedRectangle (r.reduced (0.5f), 2.0f, 1.0f);
+    }
 }
 
 void NameStrip::mouseDown (const juce::MouseEvent& e)
@@ -718,8 +727,15 @@ TrossSeqEditor::TrossSeqEditor (TrossSeqProcessor& p)
         ch.setTooltip ("MIDI channel: drag up/down");
         chanBox[t] = &ch;
 
-        auto& m = addButton ("mute" + juce::String (t + 1), "M", { kMuteX, y + 1, kMuteW, (int) kPadH - 1 }, "rubberDark");
-        m.getProperties().set ("onColour", (juce::int64) col::muteOn.getARGB());
+        auto mute = std::make_unique<MuteButton> (proc, t);
+        mute->setClickingTogglesState (true);
+        mute->getProperties().set ("style", "rubberDark");
+        mute->getProperties().set ("onColour", (juce::int64) col::muteOn.getARGB());
+        mute->setBounds (kMuteX, y + 1, kMuteW, (int) kPadH - 1);
+        mute->setTooltip ("Click: mute. Shift + hold: solo this track until you let go");
+        content.addAndMakeVisible (*mute);
+        bAtts.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, "mute" + juce::String (t + 1), *mute));
+        buttons.push_back (std::move (mute));
 
         auto learn = std::make_unique<juce::TextButton> ("LEARN");
         learn->getProperties().set ("style", "rubberDark");
@@ -833,7 +849,7 @@ juce::Slider& TrossSeqEditor::addReadout (juce::Rectangle<int> r, double lo, dou
 void TrossSeqEditor::showMapMenu()
 {
     juce::PopupMenu m;
-    m.addSectionHeader ("Note maps (set all 8 tracks)");
+    m.addSectionHeader ("Note maps (set all " + juce::String (kNumTracks) + " tracks)");
     for (int i = 0; i < TrackMap::kNumPresets; ++i)
         m.addItem (1 + i, juce::String (TrackMap::preset (i).name) + "  (ch " + juce::String (TrackMap::preset (i).channel) + ")");
     juce::PopupMenu chans;
@@ -990,11 +1006,11 @@ void TrossSeqEditor::timerCallback()
     else if (learn >= 0)   // blink while waiting for a note
         learnBtn[learn]->setToggleState ((juce::Time::getMillisecondCounter() / 250) % 2 == 0, juce::dontSendNotification);
 
-    const int nv = proc.getNameVersion();
+    const int nv = proc.getNameVersion(), solo = proc.momentarySolo.load();
     const auto now = juce::Time::getMillisecondCounter();
     for (int t = 0; t < kNumTracks; ++t)
-        if (nv != lastNameVersion || now - proc.lastSent[t].load() < 240) strips[(size_t) t]->repaint();
-    lastNameVersion = nv;
+        if (nv != lastNameVersion || solo != lastSolo || now - proc.lastSent[t].load() < 240) strips[(size_t) t]->repaint();
+    lastNameVersion = nv; lastSolo = solo;
 
     // MIDI port status line + host tempo
     const auto portText = proc.getPortName() + (proc.directOut.isOpen() ? "1" : "0") + proc.getPortError()

@@ -58,6 +58,48 @@ private:
     void finishRename (bool keep);
 };
 
+// A track's M button: click toggles the mute. Shift + mouse held: only this track plays (a momentary
+// solo, beating every mute) until the mouse button is released. Nothing is toggled.
+class MuteButton : public juce::TextButton
+{
+public:
+    MuteButton (TrossSeqProcessor& p, int t) : juce::TextButton ("M"), proc (p), track (t) {}
+    ~MuteButton() override { release(); }
+    void mouseDown (const juce::MouseEvent& e) override
+    {
+        if (e.mods.isShiftDown() && e.mods.isLeftButtonDown())
+        {
+            holding = true;
+            proc.momentarySolo = track;
+            getProperties().set ("soloHeld", true);
+            setButtonText ("S");
+            repaint();
+            return;
+        }
+        juce::TextButton::mouseDown (e);
+    }
+    void mouseDrag (const juce::MouseEvent& e) override { if (! holding) juce::TextButton::mouseDrag (e); }
+    void mouseUp (const juce::MouseEvent& e) override
+    {
+        if (holding) { release(); return; }
+        juce::TextButton::mouseUp (e);
+    }
+private:
+    TrossSeqProcessor& proc;
+    int track;
+    bool holding = false;
+    void release()
+    {
+        if (! holding) return;
+        holding = false;
+        int expected = track;
+        proc.momentarySolo.compare_exchange_strong (expected, -1);
+        getProperties().remove ("soloHeld");
+        setButtonText ("M");
+        repaint();
+    }
+};
+
 // EXPORT MIDI key: click = menu (this pattern / all in a row / all as separate files), drag = drop the
 // playing pattern onto a DAW track as a MIDI clip
 class ExportKey : public juce::Component, public juce::SettableTooltipClient
@@ -122,7 +164,7 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
-    static constexpr int kWidth = 1120, kHeight = 383;
+    static constexpr int kWidth = 1120, kHeight = 461;
 
 private:
     // everything is laid out at kWidth x kHeight here; the editor scales it
@@ -157,7 +199,7 @@ private:
     juce::TooltipWindow tooltips { this, 600 };
 
     int lastVersion = -1, lastStep = -2, lastSlot = -1, lastPending = -2, lastLen = -1, lastSel = -1,
-        lastMapVersion = -1, lastNameVersion = -1, lastLearn = -2;
+        lastMapVersion = -1, lastNameVersion = -1, lastLearn = -2, lastSolo = -2;
     juce::String lastPortText;
 
     juce::Slider& addKnob (const juce::String& paramId, juce::Point<int> centre, int diameter);

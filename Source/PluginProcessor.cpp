@@ -265,9 +265,13 @@ void TrossSeqProcessor::doStep (int step, int sample, bool seqOn, juce::int64 ga
     const int slot = currentSlot.load();
     const bool accent = patterns.cell (slot, 0, step);
     const int vel = (int) (accent ? raw.accentVel->load() : raw.velocity->load());
+    const int solo = momentarySolo.load();
     for (int t = 0; t < kNumTracks; ++t)
-        if (patterns.cell (slot, t + 1, step) && raw.mute[t]->load() < 0.5f)
+    {
+        const bool audible = solo >= 0 ? t == solo : raw.mute[t]->load() < 0.5f;   // a held solo beats every mute
+        if (patterns.cell (slot, t + 1, step) && audible)
             noteOn (t, vel, sample, gateSamples);
+    }
 }
 
 // REC while playing: the hit goes into the nearest step (swing taken into account)

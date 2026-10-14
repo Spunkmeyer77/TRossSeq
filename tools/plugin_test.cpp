@@ -4,6 +4,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "../Source/PluginProcessor.h"
 #include "../Source/MidiExport.h"
+#include "../Source/PluginEditor.h"
 
 using namespace trossseq;
 
@@ -174,6 +175,26 @@ int main (int argc, char** argv)
     check (ons (39).empty() && ! ons (36).empty(), "muted track sends nothing, others keep playing");
     setP ("mute5", 0.0f);
 
+    // 8b. momentary solo (Shift + held M): only that track plays, even if it is muted itself
+    proc.momentarySolo = 4;   // clap
+    setP ("mute5", 1.0f);
+    host.ppq = 0.0; evs.clear();
+    run (210);
+    check (! ons (39).empty() && ons (36).empty(), "held solo on the clap: clap plays (despite its mute), BD silent");
+    proc.momentarySolo = -1;
+    setP ("mute5", 0.0f);
+    host.ppq = 0.0; evs.clear();
+    run (210);
+    check (! ons (39).empty() && ! ons (36).empty(), "solo released: everything plays again");
+
+    // 8c. the five extra lanes: lane 13 (CL, note 75) plays
+    check (kNumTracks == 13 && proc.map.note (12) == 75 && proc.getTrackName (12) == "CL", "13 lanes, lane 13 = CL on note 75");
+    put (1, 13, "....x...........");
+    host.ppq = 0.0; evs.clear();
+    run (210);
+    check (ons (75).size() == 1 && ons (75)[0].m.getChannel() == 10, "lane 13 sends note 75 on channel 10");
+    put (1, 13, "................");
+
     // 9. MIDI learn on track 4: next note (60 on channel 2) becomes its note and channel; steps follow it
     host.playing = false;
     run (2);
@@ -294,6 +315,33 @@ int main (int argc, char** argv)
     put (0, 7, "..............x.");
     put (0, 8, "x...............");
     std::unique_ptr<juce::AudioProcessorEditor> ed (proc.createEditor());
+
+    // the M button with the mouse: Shift-press = momentary solo, nothing toggled; plain click = mute toggle
+    {
+        std::vector<MuteButton*> mutes;
+        std::function<void (juce::Component&)> find = [&] (juce::Component& c)
+        {
+            for (auto* ch : c.getChildren()) { if (auto* m = dynamic_cast<MuteButton*> (ch)) mutes.push_back (m); find (*ch); }
+        };
+        find (*ed);
+        check (mutes.size() == 13, "13 M buttons on the panel");
+        if (mutes.size() == 13)
+        {
+            auto* mb = mutes[2];   // LT
+            auto src = juce::Desktop::getInstance().getMainMouseSource();
+            auto ev = [&] (juce::ModifierKeys mods)
+            {
+                return juce::MouseEvent (src, { 5.0f, 5.0f }, mods, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, mb, mb,
+                                         juce::Time::getCurrentTime(), { 5.0f, 5.0f }, juce::Time::getCurrentTime(), 1, false);
+            };
+            const auto shiftLeft = juce::ModifierKeys (juce::ModifierKeys::shiftModifier | juce::ModifierKeys::leftButtonModifier);
+            mb->mouseDown (ev (shiftLeft));
+            const bool heldSolo = proc.momentarySolo.load() == 2;
+            mb->mouseUp (ev (juce::ModifierKeys (juce::ModifierKeys::shiftModifier)));
+            check (heldSolo && proc.momentarySolo.load() == -1 && proc.apvts.getRawParameterValue ("mute3")->load() < 0.5f,
+                   "Shift + hold on M: solo while held, gone on release, mute not toggled");
+        }
+    }
     std::printf ("editor size %d x %d\n", ed->getWidth(), ed->getHeight());
     juce::PNGImageFormat png;
     const int baseW = ed->getWidth(), baseH = ed->getHeight();

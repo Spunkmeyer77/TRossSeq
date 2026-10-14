@@ -53,6 +53,9 @@ public:
     void applyPreset (int i);
     int  getNameVersion() const { return nameVersion.load(); }
 
+    // ---- Shift + mouse held on a track's M button: only that track plays until the button is released
+    std::atomic<int> momentarySolo { -1 };
+
     // ---- MIDI learn: the next note that comes in sets this track's note and channel
     std::atomic<int> learnTrack { -1 };
 

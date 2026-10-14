@@ -8,7 +8,7 @@
 namespace trossseq
 {
 // sequencer rows: 0 = accent, 1..8 = drum tracks (row = track + 1)
-constexpr int kNumTracks = 8, kNumRows = kNumTracks + 1, kNumSteps = 16, kNumSlots = 12;
+constexpr int kNumTracks = 13, kNumRows = kNumTracks + 1, kNumSteps = 16, kNumSlots = 12;
 
 // ---- 12 slots x 9 rows x 16 steps, one 16-bit mask per row (same layout as TRoss 606).
 // Edited from the UI thread, read and recorded into from the audio thread, so every row is atomic.
@@ -66,12 +66,12 @@ public:
     static const Preset& preset (int i)
     {
         static const Preset p[kNumPresets] = {
-            { "General MIDI drums", 10, { 36, 38, 45, 50, 39, 42, 46, 49 },
-              { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY" } },
-            { "Roland TR-8 / TR-8S", 10, { 36, 38, 43, 50, 39, 42, 46, 49 },
-              { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CC" } },
-            { "Korg volca beats", 10, { 36, 38, 43, 50, 39, 42, 46, 49 },
-              { "KICK", "SNARE", "LO TOM", "HI TOM", "CLAP", "CL HAT", "OP HAT", "CRASH" } },
+            { "General MIDI drums", 10, { 36, 38, 45, 50, 39, 42, 46, 49, 37, 47, 51, 56, 75 },
+              { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY", "RS", "MT", "RD", "CB", "CL" } },
+            { "Roland TR-8 / TR-8S", 10, { 36, 38, 43, 50, 39, 42, 46, 49, 37, 47, 51, 56, 75 },
+              { "BD", "SD", "LT", "HT", "HC", "CH", "OH", "CC", "RS", "MT", "RC", "CB", "CL" } },
+            { "Korg volca beats", 10, { 36, 38, 43, 50, 39, 42, 46, 49, 75, 67, 37, 47, 51 },
+              { "KICK", "SNARE", "LO TOM", "HI TOM", "CLAP", "CL HAT", "OP HAT", "CRASH", "CLAVES", "AGOGO", "RIM", "MID TOM", "RIDE" } },
         };
         return p[i < 0 || i >= kNumPresets ? 0 : i];
     }

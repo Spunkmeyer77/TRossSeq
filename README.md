@@ -2,7 +2,7 @@
 
 16-step MIDI drum sequencer for playing hardware drum machines (AU / VST3 / LV2 / Standalone) by Ticco Ross, 2026.
 
-Eight drum tracks plus an accent row, 12 pattern slots, and each track sends its own MIDI note on its own channel,
+Thirteen drum tracks plus an accent row, 12 pattern slots, and each track sends its own MIDI note on its own channel,
 so one TRoss Seq can play one drum box, or several drum boxes at once.
 
 ## Getting the notes to your drum machine
@@ -39,10 +39,10 @@ port, so drum boxes with their own sequencers or tempo-synced effects follow alo
 | MIDI THRU | Passes your keyboard / pad controller through to the outputs, so you can play the drum box live |
 | Track name strips | Click to play that drum now (Shift-click = accent). With REC on while the song plays, the hit is recorded. Double-click to rename, right-click for MIDI learn |
 | NOTE / CH | Each track's MIDI note and channel: drag the red read-outs up or down. Note names use Ableton's naming (C1 = 36) |
-| M | Mutes the track |
+| M | Click: mutes the track. **Shift + hold:** solos the track for as long as you hold the mouse button (it plays even if it's muted, every other track goes quiet). Let go and everything is back as it was; nothing gets toggled |
 | LEARN | Click, then hit a key or pad: the track takes that note and channel |
-| PRESETS | Note maps for General MIDI drums, Roland TR-8 / TR-8S and Korg volca beats; all tracks on one channel; and **Save map + MIDI port as default**, which new copies of TRoss Seq then start with |
-| Step pads | 9 rows (ACCENT + 8 tracks) × 16 steps, in groups of four. Click to toggle, or drag along a row |
+| PRESETS | Note maps for General MIDI drums, Roland TR-8 / TR-8S and Korg volca beats (the default GM lanes: BD SD LT HT CP CH OH CY RS MT RD CB CL); all tracks on one channel; and **Save map + MIDI port as default**, which new copies of TRoss Seq then start with |
+| Step pads | 14 rows (ACCENT + 13 tracks) × 16 steps, in groups of four. Click to toggle, or drag along a row |
 | RUN | Sequencer on/off (MIDI THRU and the name strips still play) |
 | LENGTH | Pattern length, 1–16 steps: drag the red read-out up/down |
 | CLEAR | Clears the playing pattern |
@@ -103,5 +103,5 @@ cmake -B build -DTSEQ_BUILD_TESTS=ON && cmake --build build --target TRossSeqTes
 ```
 
 Covers note timing against the host transport, velocity and accent, gate, swing, pattern queueing, LENGTH,
-recording, MIDI learn, mute / thru / host out, loops, stop flushing, presets, MIDI export, state save/restore,
+recording, MIDI learn, mute, Shift-held solo, all 13 lanes, thru / host out, loops, stop flushing, presets, MIDI export, state save/restore,
 and an editor snapshot.
