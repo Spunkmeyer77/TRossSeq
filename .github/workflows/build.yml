@@ -1,0 +1,135 @@
+# Builds TRoss Seq on macOS, Windows and Linux.
+# - every push / pull request: builds + installers, downloadable under the run's "Artifacts"
+# - pushing a tag like v0.1.0: also publishes a GitHub Release with all installers attached
+name: Build TRoss Seq
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-14
+            configure: -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          - name: Windows
+            os: windows-2022
+            configure: ""
+          - name: Linux
+            os: ubuntu-22.04
+            configure: -DCMAKE_BUILD_TYPE=Release -DTSEQ_BUILD_TESTS=ON
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Read version
+        run: echo "VERSION=$(sed -nE 's/^project\(TRossSeq VERSION ([0-9.]+)\).*/\1/p' CMakeLists.txt)" >> "$GITHUB_ENV"
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libjack-jackd2-dev libfreetype6-dev libfontconfig1-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev \
+            libxrender-dev libgl1-mesa-dev xvfb
+
+      - name: Configure
+        run: cmake -B build -DTSEQ_COPY_PLUGINS=OFF ${{ matrix.configure }}
+
+      - name: Build
+        run: |
+          set +e
+          cmake --build build --config Release --parallel 4 2>&1 | tee build.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            echo "## Build errors (${{ matrix.name }})" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            grep -iE "error|fatal|undefined reference|unresolved" build.log | grep -v "warning" | head -60 >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            grep -iE " error |error:|fatal error|unresolved external" build.log | head -10 | while IFS= read -r line; do echo "::error::${line:0:900}"; done
+          fi
+          exit $status
+
+      # ---- tests / validation ------------------------------------------------------------
+      - name: Run plug-in tests (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p test-out
+          xvfb-run -a build/TRossSeqTest_artefacts/Release/TRossSeqTest test-out
+
+      - name: Validate Audio Unit (macOS)
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        run: |
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          cp -R "build/TRossSeq_artefacts/Release/AU/TRoss Seq.component" ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          auval -v aumu TSeq Tcro
+
+      # ---- packaging ---------------------------------------------------------------------
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          chmod +x tools/make_pkg.sh
+          ./tools/make_pkg.sh
+          mv "dist/TRossSeq-$VERSION.pkg" "dist/TRossSeq-$VERSION-macOS.pkg"
+          cd build/TRossSeq_artefacts/Release
+          ditto -c -k --keepParent "AU/TRoss Seq.component" "$GITHUB_WORKSPACE/dist/TRossSeq-$VERSION-macOS-AU.zip"
+          ditto -c -k --keepParent "VST3/TRoss Seq.vst3" "$GITHUB_WORKSPACE/dist/TRossSeq-$VERSION-macOS-VST3.zip"
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc "/DAppVersion=$env:VERSION" "installer\windows\TRossSeq.iss" 2>&1 | Tee-Object -FilePath iscc.log
+          if ($LASTEXITCODE -ne 0) {
+            "## Inno Setup errors" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+            Get-Content iscc.log -Tail 30 | ForEach-Object { "::error::$_" }
+            exit $LASTEXITCODE
+          }
+          Compress-Archive -Path "build\TRossSeq_artefacts\Release\VST3\TRoss Seq.vst3" `
+                           -DestinationPath "dist\TRossSeq-$env:VERSION-Windows-VST3.zip"
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          chmod +x tools/package_linux.sh
+          ./tools/package_linux.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TRossSeq-${{ env.VERSION }}-${{ matrix.name }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

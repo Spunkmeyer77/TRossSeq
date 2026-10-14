@@ -1,0 +1,171 @@
+#pragma once
+
+#include <juce_audio_processors/juce_audio_processors.h>
+#include "PluginProcessor.h"
+
+// Same hardware look as TRoss 606: brushed silver top, dark sequencer section, LED pads
+class SeqLookAndFeel : public juce::LookAndFeel_V4
+{
+public:
+    SeqLookAndFeel();
+    void drawRotarySlider (juce::Graphics&, int x, int y, int w, int h, float pos, float start, float end, juce::Slider&) override;
+    void drawButtonBackground (juce::Graphics&, juce::Button&, const juce::Colour&, bool highlighted, bool down) override;
+    void drawButtonText (juce::Graphics&, juce::TextButton&, bool highlighted, bool down) override;
+    void drawBubble (juce::Graphics&, juce::BubbleComponent&, const juce::Point<float>& tip, const juce::Rectangle<float>& body) override;
+    void drawComboBox (juce::Graphics&, int w, int h, bool down, int bx, int by, int bw, int bh, juce::ComboBox&) override;
+    juce::Font getComboBoxFont (juce::ComboBox&) override;
+    void positionComboBoxText (juce::ComboBox&, juce::Label&) override;
+    juce::Font getSliderPopupFont (juce::Slider&) override;
+    juce::Font getPopupMenuFont() override;
+};
+
+// Lower section: step numbers, play LEDs and the 9 x 16 pad grid. Click to toggle, drag to paint.
+class StepGrid : public juce::Component
+{
+public:
+    explicit StepGrid (TrossSeqProcessor& p) : proc (p) { setOpaque (true); }
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseDrag (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override { dragRow = -1; }
+
+    static juce::Rectangle<float> padRect (int row, int step);
+
+private:
+    TrossSeqProcessor& proc;
+    int dragRow = -1, lastDragStep = -1;
+    bool dragValue = false;
+    bool hit (juce::Point<float>, int& row, int& step) const;
+};
+
+// A track's black name strip, played like a pad: click = note, Shift-click = accented note,
+// right-click = rename / learn. Lights up whenever the track sends a note.
+class NameStrip : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    NameStrip (TrossSeqProcessor& p, int t);
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void resized() override { editor.setBounds (getLocalBounds()); }
+    void startRename();
+    juce::uint32 shownHit = 0;
+private:
+    TrossSeqProcessor& proc;
+    int track;
+    bool lastAccent = false;
+    juce::uint32 clickTime = 0;
+    juce::TextEditor editor;
+    void finishRename (bool keep);
+};
+
+// EXPORT MIDI key: click = menu (this pattern / all in a row / all as separate files), drag = drop the
+// playing pattern onto a DAW track as a MIDI clip
+class ExportKey : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    explicit ExportKey (TrossSeqProcessor& p) : proc (p) {}
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override { pressed = true; dragged = false; repaint(); }
+    void mouseDrag (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
+private:
+    TrossSeqProcessor& proc;
+    bool pressed = false, dragged = false;
+    std::unique_ptr<juce::FileChooser> chooser;
+    void showMenu();
+    void save (std::vector<int> slots, const juce::String& title);
+    void exportAllSeparate();
+    std::vector<int> nonEmptySlots() const;
+};
+
+// 12 pattern buttons, 2 across x 6 down. LED = slot playing (blinks when queued), light cap = selected.
+// Right-click a button: copy it to another slot, or clear it.
+class PatternPad : public juce::Component
+{
+public:
+    explicit PatternPad (TrossSeqProcessor& p) : proc (p) { setOpaque (true); }
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    static juce::Rectangle<float> buttonRect (int slot);
+private:
+    TrossSeqProcessor& proc;
+};
+
+// Amber read-out: playing pattern, and the queued one
+class StatusLcd : public juce::Component
+{
+public:
+    explicit StatusLcd (TrossSeqProcessor& p) : proc (p) {}
+    void paint (juce::Graphics&) override;
+private:
+    TrossSeqProcessor& proc;
+};
+
+// MIDI port selector: refreshes the port list each time it opens
+class PortBox : public juce::ComboBox
+{
+public:
+    explicit PortBox (TrossSeqProcessor& p);
+    void showPopup() override { refresh(); juce::ComboBox::showPopup(); }
+    void refresh();
+private:
+    TrossSeqProcessor& proc;
+    juce::Array<juce::MidiDeviceInfo> devices;
+};
+
+class TrossSeqEditor : public juce::AudioProcessorEditor, private juce::Timer
+{
+public:
+    explicit TrossSeqEditor (TrossSeqProcessor&);
+    ~TrossSeqEditor() override;
+
+    void paint (juce::Graphics&) override;
+    void resized() override;
+
+    static constexpr int kWidth = 1120, kHeight = 383;
+
+private:
+    // everything is laid out at kWidth x kHeight here; the editor scales it
+    struct Content : public juce::Component
+    {
+        explicit Content (TrossSeqEditor& e) : ed (e) { setOpaque (true); }
+        void paint (juce::Graphics& g) override { ed.paintPanel (g); }
+        TrossSeqEditor& ed;
+    };
+
+    TrossSeqProcessor& proc;
+    SeqLookAndFeel lnf;
+    Content content { *this };
+    StepGrid grid { proc };
+    PatternPad patternPad { proc };
+    StatusLcd lcd { proc };
+    PortBox portBox { proc };
+    std::vector<std::unique_ptr<NameStrip>> strips;
+    ExportKey exportKey { proc };
+
+    std::vector<std::unique_ptr<juce::Slider>> sliders;
+    std::vector<std::unique_ptr<juce::Button>> buttons;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sAtts;
+    std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>> bAtts;
+    juce::Slider* noteBox[trossseq::kNumTracks] {};
+    juce::Slider* chanBox[trossseq::kNumTracks] {};
+    juce::TextButton* learnBtn[trossseq::kNumTracks] {};
+    juce::TextButton clearBtn { "CLEAR" }, mapBtn { "PRESETS" };
+    // standalone app only
+    juce::TextButton playBtn { "PLAY" };
+    juce::Slider bpmBox;
+    juce::TooltipWindow tooltips { this, 600 };
+
+    int lastVersion = -1, lastStep = -2, lastSlot = -1, lastPending = -2, lastLen = -1, lastSel = -1,
+        lastMapVersion = -1, lastNameVersion = -1, lastLearn = -2;
+    juce::String lastPortText;
+
+    juce::Slider& addKnob (const juce::String& paramId, juce::Point<int> centre, int diameter);
+    juce::Button& addButton (const juce::String& paramId, const juce::String& text, juce::Rectangle<int> r, const char* style);
+    juce::Slider& addReadout (juce::Rectangle<int> r, double lo, double hi, std::function<juce::String (double)> text);
+    void showMapMenu();
+    void paintPanel (juce::Graphics&);
+    void timerCallback() override;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TrossSeqEditor)
+};
