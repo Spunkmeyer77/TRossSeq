@@ -786,6 +786,36 @@ int main (int argc, char** argv)
         }
     }
 
+    // About window: click the logo to open, click to close; snapshot it
+    {
+        LogoButton* logo = nullptr; AboutOverlay* about = nullptr;
+        std::function<void (juce::Component&)> findA = [&] (juce::Component& c)
+        {
+            for (auto* ch : c.getChildren())
+            {
+                if (auto* l = dynamic_cast<LogoButton*> (ch)) logo = l;
+                if (auto* a = dynamic_cast<AboutOverlay*> (ch)) about = a;
+                findA (*ch);
+            }
+        };
+        findA (*ed);
+        check (logo != nullptr && about != nullptr && ! about->isVisible(), "logo click area and hidden About window present");
+        if (logo != nullptr && about != nullptr)
+        {
+            auto src = juce::Desktop::getInstance().getMainMouseSource();
+            juce::MouseEvent e (src, { 20.0f, 20.0f }, juce::ModifierKeys(), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, logo, logo,
+                                juce::Time::getCurrentTime(), { 20.0f, 20.0f }, juce::Time::getCurrentTime(), 1, false);
+            logo->mouseUp (e);
+            check (about->isVisible(), "clicking the TRoss SEQ logo opens About");
+            check (AboutOverlay::formatAndHost (proc).isNotEmpty(), "About shows the format: " + AboutOverlay::formatAndHost (proc));
+            auto img = ed->createComponentSnapshot (ed->getLocalBounds(), true, 2.0f);
+            auto f = outDir.getChildFile ("about_2x.png"); f.deleteFile();
+            if (auto os = f.createOutputStream()) juce::PNGImageFormat().writeImageToStream (img, *os);
+            about->mouseDown (e);
+            check (! about->isVisible(), "clicking closes About");
+        }
+    }
+
     // the M button with the mouse: Shift-press = momentary solo, nothing toggled; plain click = mute toggle
     {
         std::vector<MuteButton*> mutes;

@@ -156,6 +156,30 @@ private:
     juce::Array<juce::MidiDeviceInfo> devices;
 };
 
+// The About window: opens over the panel when you click the TRoss SEQ logo.
+// Click anywhere (or press Esc) to close it.
+class AboutOverlay : public juce::Component
+{
+public:
+    explicit AboutOverlay (TrossSeqProcessor& p) : proc (p) { setWantsKeyboardFocus (true); setInterceptsMouseClicks (true, true); }
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override { setVisible (false); }
+    bool keyPressed (const juce::KeyPress& k) override { if (k == juce::KeyPress::escapeKey) { setVisible (false); return true; } return false; }
+    juce::Rectangle<float> card() const;
+    static juce::String formatAndHost (const TrossSeqProcessor&);
+private:
+    TrossSeqProcessor& proc;
+};
+
+// Invisible click area over the logo
+class LogoButton : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    LogoButton() { setMouseCursor (juce::MouseCursor::PointingHandCursor); setTooltip ("About TRoss Seq"); }
+    void mouseUp (const juce::MouseEvent& e) override { if (onClick && getLocalBounds().contains (e.getPosition())) onClick(); }
+    std::function<void()> onClick;
+};
+
 class TrossSeqEditor : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
@@ -203,6 +227,12 @@ private:
     juce::TextButton playBtn { "PLAY" };
     juce::Slider bpmBox;
     juce::TextButton helpBtn { "HELP" };
+    LogoButton logoBtn;
+    AboutOverlay about { proc };
+public:
+    void showAbout();
+    bool isAboutShown() const { return about.isVisible(); }
+private:
     std::unique_ptr<juce::TooltipWindow> tooltips;
     void updateHelp();
 

@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(TRossSeq VERSION 0.6.1)
+project(TRossSeq VERSION 0.7.0)
+
+# shown in the About window
+string(TIMESTAMP TSEQ_BUILD_DATE "%d %b %Y" UTC)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -56,7 +59,8 @@ target_sources(TRossSeq PRIVATE
 target_compile_definitions(TRossSeq PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
-    JUCE_VST3_CAN_REPLACE_VST2=0)
+    JUCE_VST3_CAN_REPLACE_VST2=0
+    TSEQ_BUILD_DATE="${TSEQ_BUILD_DATE}")
 
 target_link_libraries(TRossSeq
     PRIVATE
@@ -72,6 +76,7 @@ if(TSEQ_BUILD_TESTS)
     juce_add_console_app(TRossSeqTest PRODUCT_NAME "TRossSeqTest")
     target_sources(TRossSeqTest PRIVATE tools/plugin_test.cpp Source/PluginProcessor.cpp Source/PluginEditor.cpp)
     target_compile_definitions(TRossSeqTest PRIVATE
-        JucePlugin_Name="TRoss Seq" JucePlugin_VersionString="${PROJECT_VERSION}" JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+        JucePlugin_Name="TRoss Seq" JucePlugin_VersionString="${PROJECT_VERSION}" JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
+        TSEQ_BUILD_DATE="${TSEQ_BUILD_DATE}")
     target_link_libraries(TRossSeqTest PRIVATE juce::juce_audio_utils juce::juce_recommended_config_flags)
 endif()

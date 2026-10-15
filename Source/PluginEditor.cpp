@@ -873,6 +873,11 @@ TrossSeqEditor::TrossSeqEditor (TrossSeqProcessor& p)
         updateHelp();
     };
     content.addAndMakeVisible (helpBtn);
+
+    // click the logo: About window
+    logoBtn.setBounds (kMargin, 12, 360, 38);
+    logoBtn.onClick = [this] { showAbout(); };
+    content.addAndMakeVisible (logoBtn);
     updateHelp();
 
     content.addAndMakeVisible (lcd);
@@ -993,6 +998,9 @@ TrossSeqEditor::TrossSeqEditor (TrossSeqProcessor& p)
         bpmBox.setBounds (1046, 102, 50, 20);
         content.addAndMakeVisible (bpmBox);
     }
+
+    content.addChildComponent (about);   // on top of everything, hidden until the logo is clicked
+    about.setBounds (0, 0, kWidth, kHeight);
 
     setResizable (true, true);
     setResizeLimits (kWidth * 3 / 4, kHeight * 3 / 4, kWidth * 2, kHeight * 2);
@@ -1180,6 +1188,145 @@ void TrossSeqEditor::deleteMap (const juce::String& name)
 }
 
 void TrossSeqEditor::paint (juce::Graphics& g) { g.fillAll (col::darkBottom); }
+
+void TrossSeqEditor::showAbout()
+{
+    about.toFront (false);
+    about.setVisible (true);
+    if (about.isShowing()) about.grabKeyboardFocus();
+}
+
+// ================================================================================================
+juce::Rectangle<float> AboutOverlay::card() const
+{
+    return juce::Rectangle<float> (760.0f, 400.0f).withCentre (getLocalBounds().toFloat().getCentre());
+}
+
+juce::String AboutOverlay::formatAndHost (const TrossSeqProcessor& p)
+{
+    juce::String format = juce::AudioProcessor::getWrapperTypeDescription (p.wrapperType);
+    if (p.wrapperType == juce::AudioProcessor::wrapperType_Undefined) format = "Test build";
+    juce::String host = juce::PluginHostType().getHostDescription();
+    if (host.isEmpty() || host == "Unknown") return format;
+    return format + " in " + host;
+}
+
+void AboutOverlay::paint (juce::Graphics& g)
+{
+    g.fillAll (juce::Colours::black.withAlpha (0.55f));
+    const auto c = card();
+
+    // card: silver header, dark body (like the panel)
+    g.setColour (juce::Colours::black.withAlpha (0.5f));
+    g.fillRoundedRectangle (c.translated (0, 4.0f), 8.0f);
+    const float headerH = 108.0f;
+    {
+        juce::Graphics::ScopedSaveState ss (g);
+        juce::Path clip; clip.addRoundedRectangle (c, 8.0f);
+        g.reduceClipRegion (clip);
+        g.setGradientFill (juce::ColourGradient::vertical (col::darkTop, c.getY(), col::darkBottom, c.getBottom()));
+        g.fillRect (c);
+        auto head = c.withHeight (headerH);
+        g.setGradientFill (juce::ColourGradient::vertical (col::silverTop, head.getY(), col::silverBottom, head.getBottom()));
+        g.fillRect (head);
+        for (float x = head.getX(); x < head.getRight(); x += 3.0f)
+        {
+            g.setColour (juce::Colours::white.withAlpha (0.07f)); g.fillRect (x, head.getY(), 1.0f, headerH);
+        }
+        g.setColour (col::orange);
+        g.fillRect (head.getX(), head.getBottom(), head.getWidth(), 3.0f);
+    }
+    g.setColour (juce::Colours::black);
+    g.drawRoundedRectangle (c, 8.0f, 1.0f);
+
+    // ---- About
+    const float x0 = c.getX() + 26.0f;
+    auto logo = font (34.0f, true, -0.03f);
+    g.setFont (logo);
+    const float troW = juce::GlyphArrangement::getStringWidth (logo, "TRoss ");
+    g.setColour (col::ink);
+    g.drawText ("TRoss ", juce::Rectangle<float> (x0, c.getY() + 14.0f, troW + 4.0f, 40.0f), juce::Justification::bottomLeft);
+    g.setColour (col::orange);
+    g.drawText ("SEQ", juce::Rectangle<float> (x0 + troW, c.getY() + 14.0f, 120.0f, 40.0f), juce::Justification::bottomLeft);
+    g.setColour (juce::Colour (0xff3a3a3a));
+    g.setFont (font (10.5f, false, 0.3f));
+    g.drawText ("16-STEP MIDI DRUM SEQUENCER", juce::Rectangle<float> (x0, c.getY() + 58.0f, 400.0f, 14.0f), juce::Justification::centredLeft);
+    g.setFont (font (11.0f, true, 0.04f));
+    g.setColour (col::printText);
+    g.drawText (juce::String (juce::CharPointer_UTF8 ("Made by Ticco Ross  \xc2\xb7  \xc2\xa9 2026")), juce::Rectangle<float> (x0, c.getY() + 78.0f, 400.0f, 16.0f), juce::Justification::centredLeft);
+
+    const float rx = c.getRight() - 26.0f - 280.0f;
+    auto infoLine = [&] (const juce::String& label, const juce::String& value, float y)
+    {
+        g.setFont (font (8.5f, false, 0.15f));
+        g.setColour (col::softText);
+        g.drawText (label, juce::Rectangle<float> (rx, y, 90.0f, 14.0f), juce::Justification::centredLeft);
+        g.setFont (font (11.0f, true));
+        g.setColour (col::ink);
+        g.drawText (value, juce::Rectangle<float> (rx + 90.0f, y, 190.0f, 14.0f), juce::Justification::centredLeft, true);
+    };
+    infoLine ("VERSION", "v" JucePlugin_VersionString, c.getY() + 26.0f);
+    infoLine ("BUILT", TSEQ_BUILD_DATE, c.getY() + 46.0f);
+    infoLine ("RUNNING AS", formatAndHost (proc), c.getY() + 66.0f);
+
+    // ---- Quick reference
+    const float by = c.getY() + headerH + 18.0f;
+    auto heading = [&] (const juce::String& t, float x, float y)
+    {
+        g.setFont (font (9.0f, true, 0.25f));
+        g.setColour (col::accText);
+        g.drawText (t, juce::Rectangle<float> (x, y, 300.0f, 14.0f), juce::Justification::centredLeft);
+    };
+    heading ("QUICK REFERENCE", x0, by);
+    struct Row { const char* where; const char* what; };   // UTF-8 text
+    static const Row left[] = {
+        { "Click pad", "step on / off  \xc2\xb7  drag to paint" },
+        { "Shift-click pad", "flam on / off" },
+        { "Right-click pad", "flam / drag / ruff, spacing, level" },
+        { "Click name", "play the lane" },
+        { "Cmd / Ctrl-click name", "play it accented" },
+        { "Shift-click name", "rename" },
+        { "Alt-click name", "lock from the randomiser" },
+    };
+    static const Row right[] = {
+        { "Right-click name", "clear lane, learn, randomise lane" },
+        { "Right-click ACCENT", "clear the accent row" },
+        { "Click M", "mute" },
+        { "Shift + hold M", "solo while held" },
+        { "Shift-click RANDOM", "variation of this pattern" },
+        { "Right-click pattern", "copy to / clear" },
+        { "Double-click knob", "back to default" },
+    };
+    auto rows = [&] (const Row* r, int n, float x)
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            const float y = by + 22.0f + (float) i * 20.0f;
+            g.setFont (font (10.0f, true, 0.02f));
+            g.setColour (col::rowText);
+            g.drawText (r[i].where, juce::Rectangle<float> (x, y, 136.0f, 16.0f), juce::Justification::centredLeft);
+            g.setFont (font (10.0f));
+            g.setColour (col::darkLabel.brighter (0.25f));
+            g.drawText (juce::String (juce::CharPointer_UTF8 (r[i].what)), juce::Rectangle<float> (x + 138.0f, y, 210.0f, 16.0f), juce::Justification::centredLeft, true);
+        }
+    };
+    rows (left, 7, x0);
+    rows (right, 7, c.getCentreX() + 10.0f);
+
+    // ---- Credits
+    const float cy = c.getBottom() - 58.0f;
+    g.setColour (juce::Colours::white.withAlpha (0.08f));
+    g.fillRect (x0, cy - 8.0f, c.getWidth() - 52.0f, 1.0f);
+    heading ("CREDITS", x0, cy);
+    g.setFont (font (9.5f));
+    g.setColour (col::darkLabel);
+    g.drawText ("Made with JUCE.  VST is a registered trademark of Steinberg Media Technologies GmbH.  "
+                "Audio Units is a trademark of Apple Inc.",
+                juce::Rectangle<float> (x0, cy + 16.0f, c.getWidth() - 52.0f, 14.0f), juce::Justification::centredLeft, true);
+    g.setFont (font (8.5f, false, 0.15f));
+    g.setColour (col::darkLabel.withAlpha (0.7f));
+    g.drawText ("CLICK ANYWHERE TO CLOSE", juce::Rectangle<float> (x0, cy + 32.0f, c.getWidth() - 52.0f, 12.0f), juce::Justification::centredRight);
+}
 
 void TrossSeqEditor::updateHelp()
 {
