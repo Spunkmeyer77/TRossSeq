@@ -47,6 +47,21 @@ public:
     int  getPendingSlot() const { return pendingSlot.load(); }   // queued slot, -1 = none
     int  getPlayStep() const    { return playStep.load(); }      // step being played, -1 = stopped
     void clearCurrentPattern();                                  // CLEAR key (can be undone)
+    // ---- pattern chain (message thread edits, audio thread plays). Locked to the song position:
+    // the chain step = (song position in steps / LENGTH) mod chain length, so jumps and loops land right.
+    static constexpr int kMaxChain = 32;
+    void chainAppend (int slot);                 // Shift-click a pattern button
+    void chainClear();
+    // a plain click on a pattern button: queue it (playing) or switch at once (stopped)
+    void selectSlot (int slot) { if (playStep.load() >= 0) pendingSlot = (slot == currentSlot.load()) ? -1 : slot; else { pendingSlot = -1; currentSlot = slot; } }
+    void chainRemoveLast();
+    int  getChainLength() const          { return chainLen.load(); }
+    int  getChainSlot (int i) const      { return chain[i].load(); }
+    int  getChainPos() const             { return chainPos.load(); }   // step of the chain that's playing
+    bool isInChain (int slot) const      { for (int i = 0; i < chainLen.load(); ++i) if (chain[i].load() == slot) return true; return false; }
+    std::vector<int> getChain() const    { std::vector<int> v; for (int i = 0; i < chainLen.load(); ++i) v.push_back (chain[i].load()); return v; }
+    int  getChainVersion() const         { return chainVersion.load(); }
+
     // ---- clearing lanes (message thread, can be undone). row 0 = ACCENT, 1..13 = lanes
     void clearRow (int row, bool allPatterns);
     void clearRowFlams (int row, bool allPatterns);
@@ -158,7 +173,12 @@ private:
     void applyStaged();                     // audio thread
     struct SlotSnap { int slot = 0; uint16_t rows[trossseq::kNumRows] {}, flams[trossseq::kNumRows] {};
                       uint8_t styles[trossseq::kNumRows][trossseq::kNumSteps] {}; };
-    struct UndoEntry { std::vector<SlotSnap> slots; };
+    struct UndoEntry { std::vector<SlotSnap> slots; bool hasChain = false; std::vector<int> chain; };
+    void pushChainUndo();
+    void setChain (const std::vector<int>&);
+    int chainSlotFor (long long absStep, int len) const;   // -1 = no chain
+    std::atomic<int> chain[kMaxChain] {};
+    std::atomic<int> chainLen { 0 }, chainPos { -1 }, chainVersion { 0 };
     std::vector<UndoEntry> undoStack;       // message thread
     void pushUndo (std::initializer_list<int> slots);
     void pushUndoAllSlots();
@@ -181,8 +201,8 @@ private:
     void emit (const juce::MidiMessage& m, int sample);
     void noteOn (int track, int velocity, int sample, juce::int64 gateSamples);
     void flushNoteOffs (int sample);
-    void doStep (int step, int sample, bool seqOn, juce::int64 gateSamples);
-    void doGrace (int step, int sample, juce::int64 lookSamples);
+    void doStep (int step, long long absStep, int len, int sample, bool seqOn, juce::int64 gateSamples);
+    void doGrace (int step, long long absStep, int len, int sample, juce::int64 lookSamples);
     // grace notes waiting to be played (flam / drag / ruff), sample positions relative to this block
     struct SchedNote { int track = 0, velocity = 0; juce::int64 due = 0, gate = 1; };
     static constexpr int kMaxSched = 128;

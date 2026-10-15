@@ -382,6 +382,7 @@ bool TrossSeqProcessor::undoRandom()
     const auto e = undoStack.back();
     undoStack.pop_back();
     for (auto& sn : e.slots) restore (sn);
+    if (e.hasChain) setChain (e.chain);
     return true;
 }
 
@@ -518,9 +519,70 @@ void TrossSeqProcessor::flushNoteOffs (int sample)
 }
 
 // the sequencer reached `step`: a queued pattern takes over on step 1, then the step plays
-void TrossSeqProcessor::doStep (int step, int sample, bool seqOn, juce::int64 gateSamples)
+// ---- pattern chain
+int TrossSeqProcessor::chainSlotFor (long long absStep, int len) const
 {
-    if (step == 0)
+    const int n = chainLen.load();
+    if (n <= 0) return -1;
+    long long bar = absStep >= 0 ? absStep / len : -((-absStep + len - 1) / len);
+    const int idx = (int) (((bar % n) + n) % n);
+    return chain[idx].load();
+}
+
+void TrossSeqProcessor::setChain (const std::vector<int>& c)
+{
+    const int n = juce::jmin ((int) c.size(), kMaxChain);
+    chainLen = 0;                                   // audio thread sees no chain while it's rewritten
+    for (int i = 0; i < n; ++i) chain[i] = juce::jlimit (0, kNumSlots - 1, c[(size_t) i]);
+    chainLen = n;
+    if (n == 0) chainPos = -1;
+    else if (playStep.load() < 0) { currentSlot = chain[0].load(); chainPos = 0; }   // stopped: show the first one
+    ++chainVersion;
+}
+
+void TrossSeqProcessor::pushChainUndo()
+{
+    UndoEntry e; e.hasChain = true; e.chain = getChain();
+    undoStack.push_back (std::move (e));
+    if (undoStack.size() > 32) undoStack.erase (undoStack.begin());
+}
+
+void TrossSeqProcessor::chainAppend (int slot)
+{
+    if (chainLen.load() >= kMaxChain) return;
+    pushChainUndo();
+    auto c = getChain(); c.push_back (slot);
+    setChain (c);
+}
+
+void TrossSeqProcessor::chainClear()
+{
+    if (chainLen.load() == 0) return;
+    pushChainUndo();
+    setChain ({});
+}
+
+void TrossSeqProcessor::chainRemoveLast()
+{
+    if (chainLen.load() == 0) return;
+    pushChainUndo();
+    auto c = getChain(); c.pop_back();
+    setChain (c);
+}
+
+void TrossSeqProcessor::doStep (int step, long long absStep, int len, int sample, bool seqOn, juce::int64 gateSamples)
+{
+    const int chained = chainSlotFor (absStep, len);
+    if (chained >= 0)   // a chain decides which pattern plays, from the song position
+    {
+        currentSlot = chained;
+        pendingSlot = -1;
+        const int n = chainLen.load();
+        const long long bar = absStep >= 0 ? absStep / len : -((-absStep + len - 1) / len);
+        chainPos = (int) (((bar % n) + n) % n);
+        if (step == 0) applyStaged();
+    }
+    else if (step == 0)
     {
         if (pendingSlot.load() >= 0)
         {
@@ -547,14 +609,16 @@ bool TrossSeqProcessor::audible (int t) const
 
 // `step` is coming up in lookSamples: schedule the grace notes of its flams (1 = flam, 2 = drag, 3 = ruff),
 // spread evenly before the step and all over before the main hit
-void TrossSeqProcessor::doGrace (int step, int sample, juce::int64 lookSamples)
+void TrossSeqProcessor::doGrace (int step, long long absStep, int len, int sample, juce::int64 lookSamples)
 {
-    // the pattern that will be playing at that step: a queued slot or random result takes over on step 1
+    // the pattern that will be playing at that step: the chain's, or a queued slot / random result on step 1
     int slot = currentSlot.load();
     const Staged* st = nullptr;
+    const int chained = chainSlotFor (absStep, len);
+    if (chained >= 0) slot = chained;
     if (step == 0)
     {
-        if (pendingSlot.load() >= 0) slot = pendingSlot.load();
+        if (chained < 0 && pendingSlot.load() >= 0) slot = pendingSlot.load();
         const int i = staged.load (std::memory_order_acquire);
         if (i >= 0 && stagedBuf[i].slot == slot) st = &stagedBuf[i];
     }
@@ -646,7 +710,8 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     if (sel != lastPatternParam)
     {
         lastPatternParam = sel;
-        if (playing) pendingSlot = (sel == currentSlot.load()) ? -1 : sel;
+        if (chainLen.load() > 0) {}   // a chain is running: it picks the patterns (the editor clears it on a plain click)
+        else if (playing) pendingSlot = (sel == currentSlot.load()) ? -1 : sel;
         else         { pendingSlot = -1; currentSlot = sel; }
     }
 
@@ -654,6 +719,13 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     if (! playing)
     {
         if (pendingSlot.load() >= 0) { currentSlot = pendingSlot.load(); pendingSlot = -1; }
+        if (const int chained = chainSlotFor ((long long) std::floor (ppq * 4.0 + 1e-9), len); chained >= 0)
+        {
+            currentSlot = chained;   // stopped: show the chain step at the song position
+            const int n = chainLen.load();
+            const long long b = (long long) std::floor (ppq * 4.0 / len + 1e-9);
+            chainPos = (int) (((b % n) + n) % n);
+        }
         applyStaged();   // stopped before step 1 came round: write it now
         if (wasPlaying)
         {
@@ -699,12 +771,12 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         if (playing)
         {
             const auto grace = graceClock.advance (q + graceLook16);
-            if (grace >= 0 && seqOn) doGrace (wrapStep (grace, len), i, graceLookSamples);
+            if (grace >= 0 && seqOn) doGrace (wrapStep (grace, len), grace, len, i, graceLookSamples);
             for (int n = 0; n < numSched;)   // grace notes due now
                 if (sched[n].due <= i) { noteOn (sched[n].track, sched[n].velocity, i, sched[n].gate); sched[n] = sched[--numSched]; }
                 else ++n;
             const auto step = clock.advance (q);
-            if (step >= 0) doStep (wrapStep (step, len), i, seqOn, gateSamples);
+            if (step >= 0) doStep (wrapStep (step, len), step, len, i, seqOn, gateSamples);
             if (clockOut && directOut.isOpen())
             {
                 const auto tick = (juce::int64) std::floor (q * 6.0 + 1e-9);   // 24 per quarter = 6 per 16th
@@ -762,6 +834,11 @@ void TrossSeqProcessor::getStateInformation (juce::MemoryBlock& destData)
     auto state = apvts.copyState();
     auto pats = state.getOrCreateChildWithName ("PATTERNS", nullptr);
     pats.setProperty ("current", currentSlot.load(), nullptr);
+    {
+        juce::StringArray ch;
+        for (int s : getChain()) ch.add (juce::String (s));
+        pats.setProperty ("chain", ch.joinIntoString (" "), nullptr);
+    }
     for (int s = 0; s < kNumSlots; ++s)
     {
         juce::StringArray rows;
@@ -834,6 +911,13 @@ void TrossSeqProcessor::setStateInformation (const void* data, int sizeInBytes)
     currentSlot = pats.isValid() ? juce::jlimit (0, kNumSlots - 1, (int) pats.getProperty ("current", sel)) : sel;
     pendingSlot = -1;
     lastPatternParam = sel;
+    {
+        std::vector<int> c;
+        juce::StringArray ch;
+        ch.addTokens (pats.isValid() ? pats.getProperty ("chain").toString() : juce::String(), " ", "");
+        for (auto& t : ch) if (t.isNotEmpty()) c.push_back (t.getIntValue());
+        setChain (c);
+    }
 }
 
 juce::AudioProcessorEditor* TrossSeqProcessor::createEditor() { return new TrossSeqEditor (*this); }

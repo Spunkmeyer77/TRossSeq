@@ -642,6 +642,61 @@ int main (int argc, char** argv)
         check (spareEmpty && bp.patterns.get (0, 1) != 0, "RANDOM leaves the TR-06's spare lanes empty");
     }
 
+    // 14d. pattern chain, locked to the song position
+    {
+        host.playing = false; run (2);
+        setP ("seqlen", 16.0f);
+        TrossSeqProcessor cp;
+        FakeHost h2; cp.setPlayHead (&h2);
+        cp.setRateAndBufferSizeDetails (sr, block); cp.prepareToPlay (sr, block);
+        // patterns 1..3 each have a kick on a different step, so the notes tell which pattern played
+        cp.patterns.clear (0); cp.patterns.clear (1); cp.patterns.clear (2);
+        cp.patterns.setCell (0, 1, 0, true);   // pattern 1: BD step 1
+        cp.patterns.setCell (1, 1, 4, true);   // pattern 2: BD step 5
+        cp.patterns.setCell (2, 1, 8, true);   // pattern 3: BD step 9
+        cp.chainAppend (0); cp.chainAppend (0); cp.chainAppend (1); cp.chainAppend (2);
+        check (cp.getChainLength() == 4 && cp.getChainSlot (2) == 1, "chain built: 1 > 1 > 2 > 3");
+        juce::AudioBuffer<float> b2 (2, block);
+        juce::int64 t = 0; std::vector<juce::int64> kicks;
+        auto runCp = [&] (int blocks)
+        {
+            for (int k = 0; k < blocks; ++k)
+            {
+                juce::MidiBuffer m; cp.processBlock (b2, m);
+                for (const auto md : m) if (md.getMessage().isNoteOn() && md.getMessage().getNoteNumber() == 36) kicks.push_back (t + md.samplePosition);
+                if (h2.playing) h2.ppq += block / sr * h2.bpm / 60.0;
+                t += block;
+            }
+        };
+        h2.playing = true; h2.ppq = 0.0;
+        runCp (800);   // 8 s = 4 bars at 120 BPM
+        // expected kick positions (bar = 96000 samples): bar1 step1, bar2 step1, bar3 step5, bar4 step9
+        const std::vector<juce::int64> want { 0, 96000, 2 * 96000 + 24000, 3 * 96000 + 48000 };
+        check (kicks == want, "chain plays 1, 1, 2, 3 bar by bar (" + juce::String ((int) kicks.size()) + " kicks)");
+        // jump into bar 3 of the song: the chain picks pattern 2 straight away
+        kicks.clear(); t = 0;
+        h2.ppq = 8.0;   // start of bar 3
+        runCp (200);
+        check (kicks.size() == 1 && kicks[0] == 24000 && cp.getCurrentSlot() == 1 && cp.getChainPos() == 2,
+               "jumping to bar 3 lands on chain step 3 (pattern 2)");
+        // saved with the project; UNDO; a plain click clears it
+        juce::MemoryBlock ms; cp.getStateInformation (ms);
+        TrossSeqProcessor o3; o3.setStateInformation (ms.getData(), (int) ms.getSize());
+        check (o3.getChain() == std::vector<int> { 0, 0, 1, 2 }, "chain saved with the project");
+        cp.chainRemoveLast();
+        check (cp.getChainLength() == 3, "remove the last chain step");
+        cp.undoRandom();
+        check (cp.getChainLength() == 4, "UNDO brings the chain step back");
+        cp.chainClear();
+        check (cp.getChainLength() == 0, "clear the chain");
+        h2.playing = false;
+        juce::MidiBuffer m; cp.processBlock (b2, m);
+        MidiExport::Settings xs3;
+        auto mf3 = MidiExport::make (o3.patterns, o3.map, o3.getChain(), xs3, "chain");
+        double endT = 0; for (auto* e : *mf3.getTrack (0)) endT = juce::jmax (endT, e->message.getTimeStamp());
+        check (std::abs (endT - 4 * 16 * 24) < 0.5, "export: the chain as one 4-bar clip");
+    }
+
     // 14c. drum map library
     {
         auto dir = outDir.getChildFile ("maps");
@@ -696,6 +751,7 @@ int main (int argc, char** argv)
     pats.clear (0);
     pats.setCell (0, 0, 0, true); pats.setCell (0, 0, 12, true);
     { juce::Random r (7); for (int i = 0; i < 3; ++i) proc.randomise (TrossSeqProcessor::RandomOp::NewPattern); }
+    proc.chainAppend (0); proc.chainAppend (0); proc.chainAppend (1);   // a chain for the snapshot
     juce::Thread::sleep (400);   // let the name-strip flashes fade
     std::unique_ptr<juce::AudioProcessorEditor> ed (proc.createEditor());
 

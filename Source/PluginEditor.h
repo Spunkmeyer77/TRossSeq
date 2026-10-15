@@ -254,6 +254,7 @@ private:
     void askName (const juce::String& title, const juce::String& initial, const juce::String& okText, std::function<void (juce::String)> done);
     void confirm (const juce::String& title, const juce::String& message, const juce::String& okText, std::function<void()> yes);
     juce::String lastMapLabel;
+    int lastChain = -1;
     void paintPanel (juce::Graphics&);
     void timerCallback() override;
 

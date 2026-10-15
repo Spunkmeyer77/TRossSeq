@@ -84,7 +84,7 @@
     <div class="sub">16-STEP MIDI DRUM SEQUENCER &nbsp;·&nbsp; USER MANUAL</div>
   </div>
   <div class="shot"><img src="panel.png" alt="TRoss Seq panel"></div>
-  <div class="meta"><span><b>Version 0.7.1</b> &nbsp;·&nbsp; AU / VST3</span><span>Ticco Ross · 2026</span></div>
+  <div class="meta"><span><b>Version 0.8.0</b> &nbsp;·&nbsp; AU / VST3</span><span>Ticco Ross · 2026</span></div>
 </div>
 
 <!-- ============================================================ contents -->
@@ -115,7 +115,7 @@
     <ul>
       <li><b>13 drum lanes plus an accent row</b>, 16 steps each, programmed on lit step pads.</li>
       <li><b>Every lane sends its own MIDI note on its own channel</b>, so one TRoss Seq can play one drum box or several at once, hardware or software.</li>
-      <li><b>12 pattern slots</b>. A new slot always waits for the current pattern to finish, so changes land on the bar.</li>
+      <li><b>12 pattern slots</b>. A new slot always waits for the current pattern to finish, so changes land on the bar. <b>Chain</b> them (up to 32 steps), locked to the song position.</li>
       <li><b>A drum-aware randomiser</b> that writes patterns the way each drum is usually played, with styles, density, lane locks, variations, fills and undo.</li>
       <li><b>Two ways out</b>: straight to a MIDI port on your computer, or to your DAW's MIDI routing.</li>
       <li><b>Flams, drags and ruffs</b> on any step (<span class="mod">Shift</span>-click, right-click to edit), and a <b>drum map library</b> to keep one map per drum box, with built-in maps for hardware and software drum boxes.</li>
@@ -130,7 +130,7 @@
   <h2><span class="n">2</span>Installing</h2>
   <h3>macOS</h3>
   <ol class="steps">
-    <li>Open <b>TRossSeq-0.7.1-macOS.pkg</b> (the manual is in the same download).</li>
+    <li>Open <b>TRossSeq-0.8.0-macOS.pkg</b> (the manual is in the same download).</li>
     <li>The installer isn't signed, so the first time macOS blocks it. Open <b>System Settings → Privacy &amp; Security</b>, scroll down and click <b>Open Anyway</b>, then open the .pkg again.</li>
     <li>Follow the installer. It puts the Audio Unit in <code>/Library/Audio/Plug-Ins/Components</code> and the VST3 in <code>/Library/Audio/Plug-Ins/VST3</code>. Click <b>Customize</b> to install only one of them.</li>
     <li>In Ableton Live, open <b>Settings → Plug-Ins</b>, check that Audio Units (and/or VST3) are switched on, then hold <span class="mod">Option</span> and click <b>Rescan</b>.</li>
@@ -138,7 +138,7 @@
   <p>Logic and other Audio Unit hosts find it under <b>AU Instruments → Ticco Ross</b>; Live and Bitwig under <b>VST3 → Ticco Ross</b>. Section 3 has the setup for each.</p>
 
   <h3>Windows</h3>
-  <p>Run <b>TRossSeq-0.7.1-Windows-Setup.exe</b>. If SmartScreen appears, click <b>More info → Run anyway</b>. The VST3 goes to <code>C:\Program Files\Common Files\VST3</code>. Rescan plug-ins in your DAW.</p>
+  <p>Run <b>TRossSeq-0.8.0-Windows-Setup.exe</b>. If SmartScreen appears, click <b>More info → Run anyway</b>. The VST3 goes to <code>C:\Program Files\Common Files\VST3</code>. Rescan plug-ins in your DAW.</p>
 
   <h3>Linux</h3>
   <p>Unpack the <code>.tar.gz</code> and run <code>./install.sh</code>. It copies the VST3 to <code>~/.vst3</code> and the LV2 to <code>~/.lv2</code>, with no root needed. <code>./uninstall.sh</code> removes them.</p>
@@ -201,7 +201,7 @@
 <!-- ============================================================ panel -->
 <section>
   <h2><span class="n">4</span>The panel at a glance</h2>
-  <figure><img src="panel.png" alt="TRoss Seq panel"><figcaption>TRoss Seq 0.7.1. The window can be resized from its bottom-right corner.</figcaption></figure>
+  <figure><img src="panel.png" alt="TRoss Seq panel"><figcaption>TRoss Seq 0.8.0. The window can be resized from its bottom-right corner.</figcaption></figure>
   <div class="areas">
     <div class="area"><h4><span>A</span>Feel</h4><p>VELOCITY, ACCENT, GATE, SWING, FLAM and FLAM LVL knobs (section 11). Turn a knob to see its value; double-click resets it.</p></div>
     <div class="area"><h4><span>B</span>MIDI output</h4><p>MIDI OUT PORT selector and status line, HOST OUT, CLOCK OUT, MIDI THRU and PORT DELAY (section 5).</p></div>
@@ -220,6 +220,7 @@
     <tr><td><span class="lcd">PATTERN 1</span></td><td>Pattern 1 is playing and is the one you're editing.</td></tr>
     <tr><td><span class="lcd">PAT 1 &gt; 2</span></td><td>Pattern 2 is queued. It takes over when pattern 1 is back at step 1.</td></tr>
     <tr><td><span class="lcd">PAT 1 &gt; RND</span></td><td>A random pattern (or fill / variation) is waiting for step 1.</td></tr>
+    <tr><td><span class="lcd">CHN 2/4 P1</span></td><td>A chain is playing: step 2 of 4, pattern 1 (section 10).</td></tr>
   </table>
 </section>
 
@@ -372,7 +373,19 @@
     <li><b>Click a pattern button</b> to select it. While the song plays, the new slot waits until the current pattern reaches step 1 (its LED blinks while queued), so changes always land cleanly. While stopped, it switches at once.</li>
     <li>The LED shows the slot that's playing; the light cap shows the selected one. A small dash marks empty slots.</li>
     <li><b>Right-click a pattern button</b> to <b>Copy to</b> another slot, or <b>Clear</b> it.</li>
-    <li>The <i>Pattern</i> parameter can be automated, so you can arrange pattern changes in your DAW's timeline.</li>
+    <li>The <i>Pattern</i> parameter can be automated, so you can arrange pattern changes in your DAW's timeline (not while a chain is set).</li>
+  </ul>
+
+  <h3>Chaining patterns</h3>
+  <p>A chain plays several patterns one after another, for example a groove three times and a fill once.</p>
+  <ul>
+    <li><span class="mod">Shift</span>-click pattern buttons in the order you want them, up to 32 steps. Shift-clicking the same button again repeats it: <b>1, 1, 1, 2</b> plays pattern 1 three times, then pattern 2.</li>
+    <li>Each pattern plays its full LENGTH, then the next one starts on step 1. At the end, the chain starts again.</li>
+    <li>The chain is <b>locked to the song position</b>: bar 1 of the song plays chain step 1, bar 2 step 2, and so on (a "bar" being one pattern LENGTH). Jumping, looping or starting in the middle of the song always lands on the right pattern.</li>
+    <li>Chained buttons show a dim LED; the one playing is bright. The display shows <span class="lcd">CHN 2/4 P1</span>: chain step 2 of 4, playing pattern 1.</li>
+    <li>Editing the pads changes the pattern that's playing in the chain.</li>
+    <li>A plain click on a pattern button ends the chain and goes back to that single pattern.</li>
+    <li>Right-click a pattern button for <b>Add to the chain</b>, <b>Remove the last chain step</b> and <b>Clear the chain</b>. UNDO takes back chain changes. The chain is saved with the project, and EXPORT MIDI can write it as one clip.</li>
   </ul>
 
   <section class="flow">
@@ -452,6 +465,7 @@
     <li><b>Pattern N (playing)</b> saves the playing pattern as a <code>.mid</code> file.</li>
     <li><b>All patterns, in a row</b> saves every non-empty slot one after another in a single file.</li>
     <li><b>All patterns as separate files</b> saves one file per non-empty slot into a folder you choose.</li>
+    <li><b>The chain, in a row</b> saves the chain as one file, pattern after pattern (when a chain is set).</li>
   </ul>
   <p><b>Drag</b> the EXPORT MIDI key onto a MIDI track in your DAW to drop the playing pattern in as a clip.</p>
   <p>Exported files use each lane's note and channel, the current VELOCITY, ACCENT, GATE, SWING, FLAM, LENGTH and the song tempo, with 16th-note steps. Flams, drags and ruffs are written as grace notes before the step.</p>
@@ -493,7 +507,8 @@
   <table>
     <tr><th>Where</th><th>Action</th></tr>
     <tr><td>RANDOM</td><td>Click: new · Shift: variation</td></tr>
-    <tr><td>Pattern button</td><td>Click: select · Right-click: copy / clear</td></tr>
+    <tr><td>Pattern button</td><td>Click: select · Right-click: copy / clear / chain</td></tr>
+    <tr><td></td><td>Shift-click: add to the chain</td></tr>
     <tr><td>Knob</td><td>Drag · Double-click: default</td></tr>
     <tr><td>Red read-outs</td><td>Drag up / down</td></tr>
     <tr><td>EXPORT MIDI</td><td>Click: menu · Drag: clip</td></tr>
