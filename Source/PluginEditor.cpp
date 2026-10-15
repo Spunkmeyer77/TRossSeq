@@ -404,7 +404,8 @@ void NameStrip::paint (juce::Graphics& g)
     g.setColour (bg);
     g.fillRoundedRectangle (r, 2.0f);
     const int solo = proc.momentarySolo.load();
-    const bool silenced = solo >= 0 && solo != track;   // another track is held solo
+    const bool silenced = (solo >= 0 && solo != track)   // another track is held solo
+                          || proc.getTrackName (track) == "---";   // spare lane in this map
     g.setColour ((bg.getPerceivedBrightness() > 0.5f ? col::stripBg : col::stripText).withAlpha (silenced ? 0.3f : 1.0f));
     g.setFont (font (10.0f, true, 0.1f));
     g.drawText (proc.getTrackName (track), getLocalBounds(), juce::Justification::centred);
@@ -944,10 +945,15 @@ void TrossSeqEditor::showMapMenu()
     const bool modified = proc.isMapModified();
 
     juce::PopupMenu m;
-    m.addSectionHeader ("Built-in maps (set all " + juce::String (kNumTracks) + " lanes)");
-    for (int i = 0; i < TrackMap::kNumPresets; ++i)
-        m.addItem (1 + i, juce::String (TrackMap::preset (i).name) + "  (ch " + juce::String (TrackMap::preset (i).channel) + ")",
-                   true, current == TrackMap::preset (i).name && ! modified);
+    static const char* kinds[3] = { "Built-in: General MIDI", "Built-in: hardware", "Built-in: software" };
+    for (int k = 0; k < 3; ++k)
+    {
+        m.addSectionHeader (kinds[k]);
+        for (int i = 0; i < TrackMap::kNumPresets; ++i)
+            if (TrackMap::preset (i).kind == k)
+                m.addItem (1 + i, juce::String (TrackMap::preset (i).name) + "  (ch " + juce::String (TrackMap::preset (i).channel) + ")",
+                           true, current == TrackMap::preset (i).name && ! modified);
+    }
 
     m.addSectionHeader ("My maps");
     if (maps.isEmpty()) m.addItem (-1, "(none saved yet: use Save map as...)", false);

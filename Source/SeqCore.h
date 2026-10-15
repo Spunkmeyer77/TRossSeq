@@ -80,17 +80,32 @@ public:
         return -1;
     }
 
-    struct Preset { const char* name; int channel; int notes[kNumTracks]; const char* labels[kNumTracks]; };
-    static constexpr int kNumPresets = 3;
+    // Built-in maps. kind: 0 = General MIDI, 1 = hardware, 2 = software.
+    // Lanes a machine doesn't have are named "---" (note 0): spare, and skipped by the randomiser.
+    // Sources: each maker's MIDI implementation chart / manual (see the manual's reference section).
+    struct Preset { const char* name; int kind; int channel; int notes[kNumTracks]; const char* labels[kNumTracks]; };
+    static constexpr int kNumPresets = 7;
     static const Preset& preset (int i)
     {
         static const Preset p[kNumPresets] = {
-            { "General MIDI drums", 10, { 36, 38, 45, 50, 39, 42, 46, 49, 37, 47, 51, 56, 75 },
+            { "General MIDI drums", 0, 10, { 36, 38, 45, 50, 39, 42, 46, 49, 37, 47, 51, 56, 75 },
               { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY", "RS", "MT", "RD", "CB", "CL" } },
-            { "Roland TR-8 / TR-8S", 10, { 36, 38, 43, 50, 39, 42, 46, 49, 37, 47, 51, 56, 75 },
+            { "Roland TR-8 / TR-8S", 1, 10, { 36, 38, 43, 50, 39, 42, 46, 49, 37, 47, 51, 56, 75 },
               { "BD", "SD", "LT", "HT", "HC", "CH", "OH", "CC", "RS", "MT", "RC", "CB", "CL" } },
-            { "Korg volca beats", 10, { 36, 38, 43, 50, 39, 42, 46, 49, 75, 67, 37, 47, 51 },
+            { "Korg volca beats", 1, 10, { 36, 38, 43, 50, 39, 42, 46, 49, 75, 67, 37, 47, 51 },
               { "KICK", "SNARE", "LO TOM", "HI TOM", "CLAP", "CL HAT", "OP HAT", "CRASH", "CLAVES", "AGOGO", "RIM", "MID TOM", "RIDE" } },
+            // Roland TR-06 MIDI implementation chart: ch 10
+            { "Roland TR-06", 1, 10, { 36, 38, 47, 50, 0, 42, 46, 49, 0, 0, 0, 0, 0 },
+              { "BD", "SD", "LT", "HT", "---", "CH", "OH", "CY", "---", "---", "---", "---", "---" } },
+            // Roland TR-08 MIDI implementation chart: ch 1. Congas (HC 62, MC 63, LC 64) left out: set a lane to them by hand
+            { "Roland TR-08", 1, 1, { 36, 38, 43, 50, 39, 42, 46, 49, 37, 47, 70, 56, 75 },
+              { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY", "RS", "MT", "MA", "CB", "CL" } },
+            // Roland TR-09 MIDI implementation chart: ch 10
+            { "Roland TR-09", 1, 10, { 36, 38, 43, 50, 39, 42, 46, 49, 37, 47, 51, 0, 0 },
+              { "BD", "SD", "LT", "HT", "HC", "CH", "OH", "CC", "RS", "MT", "RC", "---", "---" } },
+            // UVI Prime 8 / Prime 8+ manual, MIDI mapping (C1 = 36). Software: set its MIDI channel to match
+            { "UVI Prime 8", 2, 1, { 36, 38, 41, 45, 39, 42, 46, 49, 37, 43, 0, 47, 0 },
+              { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY", "RS", "MT", "---", "CB", "---" } },
         };
         return p[i < 0 || i >= kNumPresets ? 0 : i];
     }

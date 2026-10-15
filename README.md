@@ -43,7 +43,7 @@ port, so drum boxes with their own sequencers or tempo-synced effects follow alo
 | NOTE / CH | Each track's MIDI note and channel: drag the red read-outs up or down. Note names use Ableton's naming (C1 = 36) |
 | M | Click: mutes the track. **Shift + hold:** solos the track for as long as you hold the mouse button (it plays even if it's muted, every other track goes quiet). Let go and everything is back as it was; nothing gets toggled |
 | LEARN | Click, then hit a key or pad: the track takes that note and channel |
-| PRESETS | Drum map library: built-in maps (General MIDI, Roland TR-8 / TR-8S, Korg volca beats), your own saved maps (Save map as…, Save, Rename, Delete, Show maps folder: `Documents/TRoss Seq/Maps`), all lanes on one channel, and save as default. The panel shows the current map and marks it * EDITED after changes |
+| PRESETS | Drum map library: built-in maps (General MIDI; hardware: Roland TR-06, TR-08, TR-09, TR-8 / TR-8S, Korg volca beats; software: UVI Prime 8), your own saved maps (Save map as…, Save, Rename, Delete, Show maps folder: `Documents/TRoss Seq/Maps`), all lanes on one channel, and save as default. The panel shows the current map and marks it * EDITED after changes |
 | Step pads | 14 rows (ACCENT + 13 tracks) × 16 steps, in groups of four. Click to toggle, or drag along a row |
 | RUN | Sequencer on/off (MIDI THRU and the name strips still play) |
 | LENGTH | Pattern length, 1–16 steps: drag the red read-out up/down |

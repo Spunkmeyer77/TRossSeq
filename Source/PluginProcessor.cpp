@@ -337,7 +337,10 @@ void TrossSeqProcessor::randomise (RandomOp op, int track)
 
     LaneInfo lanes[kNumTracks];
     for (int t = 0; t < kNumTracks; ++t)
-        lanes[t] = { roleFor (getTrackName (t).toStdString(), map.note (t)), locked[t].load() };
+    {
+        const auto role = roleFor (getTrackName (t).toStdString(), map.note (t));
+        lanes[t] = { role, locked[t].load() || (role == Role::Unused && op != RandomOp::Lane) };   // spare lanes are left alone
+    }
 
     // a new pattern (or lane) drops the flams on the lanes it rewrites; flams are only ever set by hand
     uint16_t clearFlams = 0;

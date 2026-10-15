@@ -533,6 +533,29 @@ int main (int argc, char** argv)
         }
     }
 
+    // 14b2. built-in maps from the makers' MIDI charts; spare lanes are skipped by the randomiser
+    {
+        TrossSeqProcessor bp;
+        auto find = [] (const char* n) { for (int i = 0; i < TrackMap::kNumPresets; ++i) if (juce::String (TrackMap::preset (i).name) == n) return i; return -1; };
+        const int tr06 = find ("Roland TR-06"), tr08 = find ("Roland TR-08"), tr09 = find ("Roland TR-09"), uvi = find ("UVI Prime 8");
+        check (tr06 >= 0 && tr08 >= 0 && tr09 >= 0 && uvi >= 0 && TrackMap::kNumPresets == 7, "built-in maps: TR-06, TR-08, TR-09, UVI Prime 8 added");
+        bp.applyPreset (tr08);
+        check (bp.map.note (0) == 36 && bp.map.note (8) == 37 && bp.map.note (10) == 70 && bp.map.note (11) == 56 && bp.map.note (12) == 75
+               && bp.map.channel (0) == 1 && bp.getTrackName (10) == "MA", "TR-08: BD 36, RS 37, MA 70, CB 56, CL 75 on channel 1");
+        bp.applyPreset (tr06);
+        check (bp.map.note (2) == 47 && bp.map.note (3) == 50 && bp.map.channel (0) == 10 && bp.getTrackName (4) == "---", "TR-06: LT 47, HT 50, ch 10, spare lanes");
+        bp.applyPreset (tr09);
+        check (bp.map.note (9) == 47 && bp.map.note (10) == 51 && bp.getTrackName (11) == "---", "TR-09: MT 47, RC 51, two spare lanes");
+        bp.applyPreset (uvi);
+        check (bp.map.note (2) == 41 && bp.map.note (9) == 43 && bp.map.note (3) == 45 && bp.map.note (11) == 47 && bp.map.note (7) == 49,
+               "UVI Prime 8: LT F1 41, MT G1 43, HT A1 45, CB B1 47, CY C#2 49");
+        bp.applyPreset (tr06);
+        for (int i = 0; i < 20; ++i) bp.randomise (TrossSeqProcessor::RandomOp::NewPattern);
+        bool spareEmpty = true;
+        for (int t : { 4, 8, 9, 10, 11, 12 }) spareEmpty &= bp.patterns.get (0, t + 1) == 0;
+        check (spareEmpty && bp.patterns.get (0, 1) != 0, "RANDOM leaves the TR-06's spare lanes empty");
+    }
+
     // 14c. drum map library
     {
         auto dir = outDir.getChildFile ("maps");

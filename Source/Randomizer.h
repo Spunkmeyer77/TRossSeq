@@ -10,7 +10,7 @@
 
 namespace trossseq
 {
-enum class Role { Kick, Snare, Clap, ClosedHat, OpenHat, Cymbal, Tom, Perc };
+enum class Role { Kick, Snare, Clap, ClosedHat, OpenHat, Cymbal, Tom, Perc, Unused };
 // (new styles go at the end: projects store the style's position)
 enum class Style { Straight, Electro, Broken, House, Techno, Detroit, MiamiBass, Breakbeat, HipHop, Dub, Latin, Industrial };
 constexpr int kNumStyles = 12;
@@ -28,6 +28,7 @@ inline Role roleFor (std::string name, int note)
     auto has = [&] (const char* w) { return name.find (w) != std::string::npos; };
     auto is  = [&] (const char* w) { return name == w; };
 
+    if (name.empty() || name == "---" || name == "SPARE") return Role::Unused;               // spare lane: left alone
     if (is ("CL") || has ("CLAVE")) return Role::Perc;                                   // claves, not closed hat
     if (is ("BD") || has ("KICK") || has ("BASS")) return Role::Kick;
     if (is ("SD") || has ("SNARE") || has ("SNR")) return Role::Snare;
@@ -72,6 +73,7 @@ inline float styleWeight2 (Role r, Style st, int s)
                 case Role::Cymbal:    return s == 0 ? 0.15f : 0.01f;
                 case Role::Tom:       return s >= 12 ? 0.12f : 0.03f;
                 case Role::Perc:      return eighth ? 0.05f : 0.15f;
+                case Role::Unused:    return 0.0f;
             }
             break;
         case Style::Techno:      // driving kick, rolling 16th hats, percussion building tension
@@ -85,6 +87,7 @@ inline float styleWeight2 (Role r, Style st, int s)
                 case Role::Cymbal:    return s == 0 ? 0.25f : 0.01f;
                 case Role::Tom:       return eighth ? 0.06f : 0.1f;
                 case Role::Perc:      return eighth ? 0.12f : 0.3f;
+                case Role::Unused:    return 0.0f;
             }
             break;
         case Style::Detroit:     // soulful techno: syncopated hats and claps, cowbell / clave figures
@@ -101,6 +104,7 @@ inline float styleWeight2 (Role r, Style st, int s)
                 case Role::Cymbal:    return s == 0 ? 0.2f : 0.01f;
                 case Role::Tom:       return (s == 3 || s == 11 || s >= 13) ? 0.15f : 0.04f;
                 case Role::Perc:      return tbl (perc, s);
+                case Role::Unused:    return 0.0f;
             }
             break;
         }
@@ -118,6 +122,7 @@ inline float styleWeight2 (Role r, Style st, int s)
                 case Role::Cymbal:    return s == 0 ? 0.25f : 0.01f;
                 case Role::Tom:       return s >= 12 ? 0.3f : s == 9 ? 0.1f : 0.03f;
                 case Role::Perc:      return (s == 2 || s == 10) ? 0.25f : eighth ? 0.04f : 0.12f;
+                case Role::Unused:    return 0.0f;
             }
             break;
         }
@@ -135,6 +140,7 @@ inline float styleWeight2 (Role r, Style st, int s)
                 case Role::Cymbal:    return s == 0 ? 0.3f : 0.01f;
                 case Role::Tom:       return s >= 13 ? 0.2f : 0.03f;
                 case Role::Perc:      return 0.1f;
+                case Role::Unused:    return 0.0f;
             }
             break;
         }
@@ -152,6 +158,7 @@ inline float styleWeight2 (Role r, Style st, int s)
                 case Role::Cymbal:    return s == 0 ? 0.1f : 0.01f;
                 case Role::Tom:       return 0.03f;
                 case Role::Perc:      return eighth ? 0.04f : 0.08f;
+                case Role::Unused:    return 0.0f;
             }
             break;
         }
@@ -169,6 +176,7 @@ inline float styleWeight2 (Role r, Style st, int s)
                 case Role::Cymbal:    return s == 0 ? 0.1f : 0.01f;
                 case Role::Tom:       return s >= 12 ? 0.08f : 0.03f;
                 case Role::Perc:      return tbl (perc, s);
+                case Role::Unused:    return 0.0f;
             }
             break;
         }
@@ -186,6 +194,7 @@ inline float styleWeight2 (Role r, Style st, int s)
                 case Role::Cymbal:    return s == 0 ? 0.1f : 0.01f;
                 case Role::Tom:       return (s == 6 || s == 7 || s == 14 || s == 15) ? 0.35f : s == 10 ? 0.25f : 0.06f;
                 case Role::Perc:      return tbl (clave, s);
+                case Role::Unused:    return 0.0f;
             }
             break;
         }
@@ -200,6 +209,7 @@ inline float styleWeight2 (Role r, Style st, int s)
                 case Role::Cymbal:    return s == 0 ? 0.2f : 0.01f;
                 case Role::Tom:       return s >= 12 ? 0.12f : 0.06f;
                 case Role::Perc:      return eighth ? 0.15f : 0.05f;
+                case Role::Unused:    return 0.0f;
             }
             break;
         default: break;
@@ -224,6 +234,7 @@ inline float stepWeight (Role r, Style st, int s)
                 case Role::Cymbal:    return s == 0 ? 0.35f : 0.02f;
                 case Role::Tom:       return s >= 12 ? 0.22f : 0.03f;
                 case Role::Perc:      return eighth ? 0.08f : 0.16f;
+                case Role::Unused:    return 0.0f;
             }
             break;
         case Style::Electro:   // syncopated kick, sparse snare, busy 16th hats
@@ -242,6 +253,7 @@ inline float stepWeight (Role r, Style st, int s)
                 case Role::Cymbal:    return s == 0 ? 0.18f : 0.01f;
                 case Role::Tom:       return s >= 13 ? 0.25f : s == 7 ? 0.1f : 0.03f;
                 case Role::Perc:      return eighth ? 0.07f : 0.2f;
+                case Role::Unused:    return 0.0f;
             }
             break;
         case Style::Broken:    // scattered, off the grid
@@ -255,6 +267,7 @@ inline float stepWeight (Role r, Style st, int s)
                 case Role::Cymbal:    return s == 0 ? 0.15f : 0.03f;
                 case Role::Tom:       return 0.13f;
                 case Role::Perc:      return 0.18f;
+                case Role::Unused:    return 0.0f;
             }
             break;
         default: break;
@@ -273,6 +286,7 @@ inline float fillWeight (Role r)
         case Role::Kick:      return 0.3f;
         case Role::Clap:      return 0.25f;
         case Role::Perc:      return 0.3f;
+        case Role::Unused:    return 0.0f;
         case Role::OpenHat:   return 0.12f;
         case Role::Cymbal:    return 0.0f;
     }

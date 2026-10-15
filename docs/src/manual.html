@@ -84,7 +84,7 @@
     <div class="sub">16-STEP MIDI DRUM SEQUENCER &nbsp;·&nbsp; USER MANUAL</div>
   </div>
   <div class="shot"><img src="panel.png" alt="TRoss Seq panel"></div>
-  <div class="meta"><span><b>Version 0.4.0</b> &nbsp;·&nbsp; AU / VST3</span><span>Ticco Ross · 2026</span></div>
+  <div class="meta"><span><b>Version 0.5.0</b> &nbsp;·&nbsp; AU / VST3</span><span>Ticco Ross · 2026</span></div>
 </div>
 
 <!-- ============================================================ contents -->
@@ -130,7 +130,7 @@
   <h2><span class="n">2</span>Installing</h2>
   <h3>macOS</h3>
   <ol class="steps">
-    <li>Open <b>TRossSeq-0.4.0-macOS.pkg</b> (the manual is in the same download).</li>
+    <li>Open <b>TRossSeq-0.5.0-macOS.pkg</b> (the manual is in the same download).</li>
     <li>The installer isn't signed, so the first time macOS blocks it. Open <b>System Settings → Privacy &amp; Security</b>, scroll down and click <b>Open Anyway</b>, then open the .pkg again.</li>
     <li>Follow the installer. It puts the Audio Unit in <code>/Library/Audio/Plug-Ins/Components</code> and the VST3 in <code>/Library/Audio/Plug-Ins/VST3</code>. Click <b>Customize</b> to install only one of them.</li>
     <li>In Ableton Live, open <b>Settings → Plug-Ins</b>, check that Audio Units (and/or VST3) are switched on, then hold <span class="mod">Option</span> and click <b>Rescan</b>.</li>
@@ -138,7 +138,7 @@
   <p>You'll find it in Live's browser under <b>Plug-Ins → Audio Units → Ticco Ross → TRoss Seq</b> (or under VST3).</p>
 
   <h3>Windows</h3>
-  <p>Run <b>TRossSeq-0.4.0-Windows-Setup.exe</b>. If SmartScreen appears, click <b>More info → Run anyway</b>. The VST3 goes to <code>C:\Program Files\Common Files\VST3</code>. Rescan plug-ins in your DAW.</p>
+  <p>Run <b>TRossSeq-0.5.0-Windows-Setup.exe</b>. If SmartScreen appears, click <b>More info → Run anyway</b>. The VST3 goes to <code>C:\Program Files\Common Files\VST3</code>. Rescan plug-ins in your DAW.</p>
 
   <h3>Linux</h3>
   <p>Unpack the <code>.tar.gz</code> and run <code>./install.sh</code>. It copies the VST3 to <code>~/.vst3</code> and the LV2 to <code>~/.lv2</code>, with no root needed. <code>./uninstall.sh</code> removes them.</p>
@@ -163,7 +163,7 @@
 <!-- ============================================================ panel -->
 <section>
   <h2><span class="n">4</span>The panel at a glance</h2>
-  <figure><img src="panel.png" alt="TRoss Seq panel"><figcaption>TRoss Seq 0.4.0. The window can be resized from its bottom-right corner.</figcaption></figure>
+  <figure><img src="panel.png" alt="TRoss Seq panel"><figcaption>TRoss Seq 0.5.0. The window can be resized from its bottom-right corner.</figcaption></figure>
   <div class="areas">
     <div class="area"><h4><span>A</span>Feel</h4><p>VELOCITY, ACCENT, GATE, SWING and FLAM knobs (section 11). Turn a knob to see its value; double-click resets it.</p></div>
     <div class="area"><h4><span>B</span>MIDI output</h4><p>MIDI OUT PORT selector and status line, HOST OUT, CLOCK OUT, MIDI THRU and PORT DELAY (section 5).</p></div>
@@ -231,7 +231,7 @@
   <p>A <b>drum map</b> is the set of lane names, notes, channels and locks. Make one for each drum box you own, save it once, and pick it whenever you use that box. The line under PRESETS shows the current map, e.g. <b>MAP: TR-8S STUDIO</b>, with an orange <b style="color:#e0531f">* EDITED</b> once you change anything after picking or saving it.</p>
   <table>
     <tr><th>PRESETS menu</th><th>What it does</th></tr>
-    <tr><td>Built-in maps</td><td>General MIDI drums, Roland TR-8 / TR-8S, Korg volca beats. Sets all 13 lanes at once (full table in section 15).</td></tr>
+    <tr><td>Built-in maps</td><td>Sets all 13 lanes at once. <b>General MIDI</b> drums; <b>hardware:</b> Roland TR-06, TR-08, TR-09, TR-8 / TR-8S, Korg volca beats; <b>software:</b> UVI Prime 8. Full tables in section 15.</td></tr>
     <tr><td>My maps</td><td>Your saved maps. Click one to load it. A tick shows the current, unedited map.</td></tr>
     <tr><td>Save "<i>name</i>"</td><td>Overwrites the current saved map with your changes (only when it's one of your maps and it's edited).</td></tr>
     <tr><td>Save map as…</td><td>Saves the current lanes under a new name. If the name exists, you're asked before it's replaced.</td></tr>
@@ -241,6 +241,16 @@
     <tr><td>Save map + MIDI port as default</td><td>New copies of TRoss Seq start with the current map and port.</td></tr>
   </table>
   <div class="note"><b>Check your drum box.</b> The preset maps follow each maker's published default notes. If a sound doesn't trigger, look up its note in the drum box's manual or MIDI settings and fix that lane with LEARN or the NOTE read-out.</div>
+
+  <h3>Playing a software drum machine in Live</h3>
+  <p>Live doesn't pass MIDI from one plug-in to another, so send TRoss Seq to a virtual MIDI port and play the software from there. On a Mac:</p>
+  <ol class="steps">
+    <li>Open <b>Audio MIDI Setup</b> → Window → Show MIDI Studio, double-click <b>IAC Driver</b> and tick <b>Device is online</b>.</li>
+    <li>In TRoss Seq, set <b>MIDI OUT PORT</b> to <b>IAC Driver Bus 1</b> and pick the software's map in PRESETS (e.g. UVI Prime 8).</li>
+    <li>Put the software instrument on its own MIDI track, set that track's <b>MIDI From</b> to <b>IAC Driver (Bus 1)</b> and Monitor to <b>In</b>.</li>
+    <li>Make sure the software listens on the channel the lanes send on (CH), or on all channels.</li>
+  </ol>
+  <p>In Live's Settings → Link, Tempo &amp; MIDI, switch <b>Track</b> on for the IAC Driver <i>input</i> only. On Windows, use a virtual MIDI port such as loopMIDI the same way.</p>
 
   <h3>Using several drum boxes</h3>
   <p>Give each drum box its own MIDI channel and set the lanes' CH to match: for example lanes 1–8 on channel 10 for one box, lanes 9–13 on channel 11 for another. Both boxes can sit on the same MIDI port (daisy-chained through MIDI THRU) or you can use two TRoss Seq instances with a port each.</p>
@@ -393,24 +403,14 @@
 <!-- ============================================================ reference -->
 <section>
   <h2><span class="n">15</span>Reference</h2>
-  <h3>Preset note maps</h3>
-  <table class="maps">
-    <tr><th>Lane</th><th colspan="2">General MIDI (ch 10)</th><th colspan="2">Roland TR-8 / TR-8S (ch 10)</th><th colspan="2">Korg volca beats (ch 10)</th></tr>
-    <tr><td>1</td><td>BD</td><td>36</td><td>BD</td><td>36</td><td>KICK</td><td>36</td></tr>
-    <tr><td>2</td><td>SD</td><td>38</td><td>SD</td><td>38</td><td>SNARE</td><td>38</td></tr>
-    <tr><td>3</td><td>LT</td><td>45</td><td>LT</td><td>43</td><td>LO TOM</td><td>43</td></tr>
-    <tr><td>4</td><td>HT</td><td>50</td><td>HT</td><td>50</td><td>HI TOM</td><td>50</td></tr>
-    <tr><td>5</td><td>CP</td><td>39</td><td>HC</td><td>39</td><td>CLAP</td><td>39</td></tr>
-    <tr><td>6</td><td>CH</td><td>42</td><td>CH</td><td>42</td><td>CL HAT</td><td>42</td></tr>
-    <tr><td>7</td><td>OH</td><td>46</td><td>OH</td><td>46</td><td>OP HAT</td><td>46</td></tr>
-    <tr><td>8</td><td>CY</td><td>49</td><td>CC</td><td>49</td><td>CRASH</td><td>49</td></tr>
-    <tr><td>9</td><td>RS</td><td>37</td><td>RS</td><td>37</td><td>CLAVES</td><td>75</td></tr>
-    <tr><td>10</td><td>MT</td><td>47</td><td>MT</td><td>47</td><td>AGOGO</td><td>67</td></tr>
-    <tr><td>11</td><td>RD</td><td>51</td><td>RC</td><td>51</td><td class="dim">RIM</td><td class="dim">37</td></tr>
-    <tr><td>12</td><td>CB</td><td>56</td><td>CB</td><td>56</td><td class="dim">MID TOM</td><td class="dim">47</td></tr>
-    <tr><td>13</td><td>CL</td><td>75</td><td>CL</td><td>75</td><td class="dim">RIDE</td><td class="dim">51</td></tr>
-  </table>
-  <p class="dim" style="font-size:8pt">Lanes in grey are spare: those notes are not part of the drum box's own map. Point them at another drum box or reuse them.</p>
+  <h3>Built-in maps</h3>
+  <p>Notes are taken from each maker's MIDI implementation chart or manual. Note names: C1 = 36. <span class="dim">Spare</span> lanes are sounds the machine doesn't have: they're dimmed, send note 0 if you program them, and the randomiser leaves them alone. Give one a name and note to use it.</p>
+  <h3 style="font-size:9.5pt">Hardware</h3>
+<table class="maps"><tr><th>Lane</th><th colspan="2">Roland TR-06 (ch 10)</th><th colspan="2">Roland TR-08 (ch 1)</th><th colspan="2">Roland TR-09 (ch 10)</th></tr><tr><td>1</td><td>BD</td><td>36</td><td>BD</td><td>36</td><td>BD</td><td>36</td></tr><tr><td>2</td><td>SD</td><td>38</td><td>SD</td><td>38</td><td>SD</td><td>38</td></tr><tr><td>3</td><td>LT</td><td>47</td><td>LT</td><td>43</td><td>LT</td><td>43</td></tr><tr><td>4</td><td>HT</td><td>50</td><td>HT</td><td>50</td><td>HT</td><td>50</td></tr><tr><td>5</td><td class="dim">spare</td><td class="dim">–</td><td>CP</td><td>39</td><td>HC</td><td>39</td></tr><tr><td>6</td><td>CH</td><td>42</td><td>CH</td><td>42</td><td>CH</td><td>42</td></tr><tr><td>7</td><td>OH</td><td>46</td><td>OH</td><td>46</td><td>OH</td><td>46</td></tr><tr><td>8</td><td>CY</td><td>49</td><td>CY</td><td>49</td><td>CC</td><td>49</td></tr><tr><td>9</td><td class="dim">spare</td><td class="dim">–</td><td>RS</td><td>37</td><td>RS</td><td>37</td></tr><tr><td>10</td><td class="dim">spare</td><td class="dim">–</td><td>MT</td><td>47</td><td>MT</td><td>47</td></tr><tr><td>11</td><td class="dim">spare</td><td class="dim">–</td><td>MA</td><td>70</td><td>RC</td><td>51</td></tr><tr><td>12</td><td class="dim">spare</td><td class="dim">–</td><td>CB</td><td>56</td><td class="dim">spare</td><td class="dim">–</td></tr><tr><td>13</td><td class="dim">spare</td><td class="dim">–</td><td>CL</td><td>75</td><td class="dim">spare</td><td class="dim">–</td></tr></table><table class="maps"><tr><th>Lane</th><th colspan="2">Roland TR-8 / TR-8S (ch 10)</th><th colspan="2">Korg volca beats (ch 10)</th></tr><tr><td>1</td><td>BD</td><td>36</td><td>KICK</td><td>36</td></tr><tr><td>2</td><td>SD</td><td>38</td><td>SNARE</td><td>38</td></tr><tr><td>3</td><td>LT</td><td>43</td><td>LO TOM</td><td>43</td></tr><tr><td>4</td><td>HT</td><td>50</td><td>HI TOM</td><td>50</td></tr><tr><td>5</td><td>HC</td><td>39</td><td>CLAP</td><td>39</td></tr><tr><td>6</td><td>CH</td><td>42</td><td>CL HAT</td><td>42</td></tr><tr><td>7</td><td>OH</td><td>46</td><td>OP HAT</td><td>46</td></tr><tr><td>8</td><td>CC</td><td>49</td><td>CRASH</td><td>49</td></tr><tr><td>9</td><td>RS</td><td>37</td><td>CLAVES</td><td>75</td></tr><tr><td>10</td><td>MT</td><td>47</td><td>AGOGO</td><td>67</td></tr><tr><td>11</td><td>RC</td><td>51</td><td>RIM</td><td>37</td></tr><tr><td>12</td><td>CB</td><td>56</td><td>MID TOM</td><td>47</td></tr><tr><td>13</td><td>CL</td><td>75</td><td>RIDE</td><td>51</td></tr></table>
+  <p class="dim" style="font-size:8pt">TR-08: the three congas (high 62, mid 63, low 64) don't fit in 13 lanes; set any lane to them with NOTE or LEARN. TR-08 receives on channel 1 by default, the others on channel 10; if you changed the channel on the machine, use PRESETS → All lanes on channel.</p>
+  <h3 style="font-size:9.5pt">General MIDI and software</h3>
+<table class="maps"><tr><th>Lane</th><th colspan="2">General MIDI drums (ch 10)</th><th colspan="2">UVI Prime 8 (ch 1)</th></tr><tr><td>1</td><td>BD</td><td>36</td><td>BD</td><td>36</td></tr><tr><td>2</td><td>SD</td><td>38</td><td>SD</td><td>38</td></tr><tr><td>3</td><td>LT</td><td>45</td><td>LT</td><td>41</td></tr><tr><td>4</td><td>HT</td><td>50</td><td>HT</td><td>45</td></tr><tr><td>5</td><td>CP</td><td>39</td><td>CP</td><td>39</td></tr><tr><td>6</td><td>CH</td><td>42</td><td>CH</td><td>42</td></tr><tr><td>7</td><td>OH</td><td>46</td><td>OH</td><td>46</td></tr><tr><td>8</td><td>CY</td><td>49</td><td>CY</td><td>49</td></tr><tr><td>9</td><td>RS</td><td>37</td><td>RS</td><td>37</td></tr><tr><td>10</td><td>MT</td><td>47</td><td>MT</td><td>43</td></tr><tr><td>11</td><td>RD</td><td>51</td><td class="dim">spare</td><td class="dim">–</td></tr><tr><td>12</td><td>CB</td><td>56</td><td>CB</td><td>47</td></tr><tr><td>13</td><td>CL</td><td>75</td><td class="dim">spare</td><td class="dim">–</td></tr></table>
+  <p class="dim" style="font-size:8pt">UVI Prime 8: notes from the Prime 8+ manual. Its pitched bass drum (C-1 to B0) and pattern keys (C3 to C4) aren't used.</p>
 
   <h3>Mouse and keyboard</h3>
   <div class="two">
