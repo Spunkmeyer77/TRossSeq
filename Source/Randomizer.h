@@ -28,7 +28,7 @@ inline Role roleFor (std::string name, int note)
     auto has = [&] (const char* w) { return name.find (w) != std::string::npos; };
     auto is  = [&] (const char* w) { return name == w; };
 
-    if (name.empty() || name == "---" || name == "SPARE") return Role::Unused;               // spare lane: left alone
+    if (name.empty() || name == "---" || name == "SPARE" || name == "PCF") return Role::Unused;   // spare lane / effect trigger: left alone
     if (is ("CL") || has ("CLAVE")) return Role::Perc;                                   // claves, not closed hat
     if (is ("BD") || has ("KICK") || has ("BASS")) return Role::Kick;
     if (is ("SD") || has ("SNARE") || has ("SNR")) return Role::Snare;

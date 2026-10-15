@@ -538,7 +538,13 @@ int main (int argc, char** argv)
         TrossSeqProcessor bp;
         auto find = [] (const char* n) { for (int i = 0; i < TrackMap::kNumPresets; ++i) if (juce::String (TrackMap::preset (i).name) == n) return i; return -1; };
         const int tr06 = find ("Roland TR-06"), tr08 = find ("Roland TR-08"), tr09 = find ("Roland TR-09"), uvi = find ("UVI Prime 8");
-        check (tr06 >= 0 && tr08 >= 0 && tr09 >= 0 && uvi >= 0 && TrackMap::kNumPresets == 7, "built-in maps: TR-06, TR-08, TR-09, UVI Prime 8 added");
+        const int adm = find ("AudioRealism ADM (ADM1X)");
+        check (tr06 >= 0 && tr08 >= 0 && tr09 >= 0 && uvi >= 0 && adm >= 0 && TrackMap::kNumPresets == 8, "built-in maps: TR-06, TR-08, TR-09, UVI Prime 8, ADM added");
+        bp.applyPreset (adm);
+        check (bp.map.note (1) == 40 && bp.map.note (5) == 44 && bp.map.note (7) == 51 && bp.map.note (11) == 49 && bp.map.note (12) == 52
+               && bp.getTrackName (12) == "PCF", "ADM: SD 40, CH 44, CY 51, CB 49, PCF 52 (unaccented keys)");
+        for (int i = 0; i < 20; ++i) bp.randomise (TrossSeqProcessor::RandomOp::NewPattern);
+        check (bp.patterns.get (0, 13) == 0 && bp.patterns.get (0, 11) == 0, "RANDOM never triggers ADM's PCF lane or the spare lane");
         bp.applyPreset (tr08);
         check (bp.map.note (0) == 36 && bp.map.note (8) == 37 && bp.map.note (10) == 70 && bp.map.note (11) == 56 && bp.map.note (12) == 75
                && bp.map.channel (0) == 1 && bp.getTrackName (10) == "MA", "TR-08: BD 36, RS 37, MA 70, CB 56, CL 75 on channel 1");
@@ -550,6 +556,7 @@ int main (int argc, char** argv)
         check (bp.map.note (2) == 41 && bp.map.note (9) == 43 && bp.map.note (3) == 45 && bp.map.note (11) == 47 && bp.map.note (7) == 49,
                "UVI Prime 8: LT F1 41, MT G1 43, HT A1 45, CB B1 47, CY C#2 49");
         bp.applyPreset (tr06);
+        bp.patterns.clear (0);
         for (int i = 0; i < 20; ++i) bp.randomise (TrossSeqProcessor::RandomOp::NewPattern);
         bool spareEmpty = true;
         for (int t : { 4, 8, 9, 10, 11, 12 }) spareEmpty &= bp.patterns.get (0, t + 1) == 0;

@@ -84,7 +84,7 @@ public:
     // Lanes a machine doesn't have are named "---" (note 0): spare, and skipped by the randomiser.
     // Sources: each maker's MIDI implementation chart / manual (see the manual's reference section).
     struct Preset { const char* name; int kind; int channel; int notes[kNumTracks]; const char* labels[kNumTracks]; };
-    static constexpr int kNumPresets = 7;
+    static constexpr int kNumPresets = 8;
     static const Preset& preset (int i)
     {
         static const Preset p[kNumPresets] = {
@@ -106,6 +106,10 @@ public:
             // UVI Prime 8 / Prime 8+ manual, MIDI mapping (C1 = 36). Software: set its MIDI channel to match
             { "UVI Prime 8", 2, 1, { 36, 38, 41, 45, 39, 42, 46, 49, 37, 43, 0, 47, 0 },
               { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY", "RS", "MT", "---", "CB", "---" } },
+            // AudioRealism ADM manual, "Using Note Mode" (MIDI key numbers). Unaccented keys; TRoss Seq's accent
+            // velocity (above 100) plays ADM's accent. PCF = Pattern Controlled Fx trigger (not randomised)
+            { "AudioRealism ADM (ADM1X)", 2, 1, { 36, 40, 43, 50, 39, 44, 46, 51, 37, 47, 0, 49, 52 },
+              { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY", "RS", "MT", "---", "CB", "PCF" } },
         };
         return p[i < 0 || i >= kNumPresets ? 0 : i];
     }
