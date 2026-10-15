@@ -84,7 +84,7 @@
     <div class="sub">16-STEP MIDI DRUM SEQUENCER &nbsp;·&nbsp; USER MANUAL</div>
   </div>
   <div class="shot"><img src="panel.png" alt="TRoss Seq panel"></div>
-  <div class="meta"><span><b>Version 0.6.0</b> &nbsp;·&nbsp; AU / VST3</span><span>Ticco Ross · 2026</span></div>
+  <div class="meta"><span><b>Version 0.6.1</b> &nbsp;·&nbsp; AU / VST3</span><span>Ticco Ross · 2026</span></div>
 </div>
 
 <!-- ============================================================ contents -->
@@ -130,7 +130,7 @@
   <h2><span class="n">2</span>Installing</h2>
   <h3>macOS</h3>
   <ol class="steps">
-    <li>Open <b>TRossSeq-0.6.0-macOS.pkg</b> (the manual is in the same download).</li>
+    <li>Open <b>TRossSeq-0.6.1-macOS.pkg</b> (the manual is in the same download).</li>
     <li>The installer isn't signed, so the first time macOS blocks it. Open <b>System Settings → Privacy &amp; Security</b>, scroll down and click <b>Open Anyway</b>, then open the .pkg again.</li>
     <li>Follow the installer. It puts the Audio Unit in <code>/Library/Audio/Plug-Ins/Components</code> and the VST3 in <code>/Library/Audio/Plug-Ins/VST3</code>. Click <b>Customize</b> to install only one of them.</li>
     <li>In Ableton Live, open <b>Settings → Plug-Ins</b>, check that Audio Units (and/or VST3) are switched on, then hold <span class="mod">Option</span> and click <b>Rescan</b>.</li>
@@ -138,7 +138,7 @@
   <p>You'll find it in Live's browser under <b>Plug-Ins → Audio Units → Ticco Ross → TRoss Seq</b> (or under VST3).</p>
 
   <h3>Windows</h3>
-  <p>Run <b>TRossSeq-0.6.0-Windows-Setup.exe</b>. If SmartScreen appears, click <b>More info → Run anyway</b>. The VST3 goes to <code>C:\Program Files\Common Files\VST3</code>. Rescan plug-ins in your DAW.</p>
+  <p>Run <b>TRossSeq-0.6.1-Windows-Setup.exe</b>. If SmartScreen appears, click <b>More info → Run anyway</b>. The VST3 goes to <code>C:\Program Files\Common Files\VST3</code>. Rescan plug-ins in your DAW.</p>
 
   <h3>Linux</h3>
   <p>Unpack the <code>.tar.gz</code> and run <code>./install.sh</code>. It copies the VST3 to <code>~/.vst3</code> and the LV2 to <code>~/.lv2</code>, with no root needed. <code>./uninstall.sh</code> removes them.</p>
@@ -163,7 +163,7 @@
 <!-- ============================================================ panel -->
 <section>
   <h2><span class="n">4</span>The panel at a glance</h2>
-  <figure><img src="panel.png" alt="TRoss Seq panel"><figcaption>TRoss Seq 0.6.0. The window can be resized from its bottom-right corner.</figcaption></figure>
+  <figure><img src="panel.png" alt="TRoss Seq panel"><figcaption>TRoss Seq 0.6.1. The window can be resized from its bottom-right corner.</figcaption></figure>
   <div class="areas">
     <div class="area"><h4><span>A</span>Feel</h4><p>VELOCITY, ACCENT, GATE, SWING, FLAM and FLAM LVL knobs (section 11). Turn a knob to see its value; double-click resets it.</p></div>
     <div class="area"><h4><span>B</span>MIDI output</h4><p>MIDI OUT PORT selector and status line, HOST OUT, CLOCK OUT, MIDI THRU and PORT DELAY (section 5).</p></div>
@@ -278,7 +278,7 @@
   <p>A flam is a quick, softer grace note just before the main hit, like a drummer's two sticks landing almost together. A <b>drag</b> has two grace notes and a <b>ruff</b> three.</p>
   <ul>
     <li><span class="mod">Shift</span>-click a pad to add a flam. If the step was off, it switches on with the flam. <span class="mod">Shift</span>-click again to remove it; the step stays on. A plain click switches the step off, flam included.</li>
-    <li>Grace notes play <b>before</b> the step, so the main hit stays exactly on the grid. The pad shows one small LED per grace note in front of the main one. A thin line under the LEDs means the step has its own spacing or level.</li>
+    <li>Grace notes play <b>before</b> the step, so the main hit stays exactly on the grid. The pad shows a small column of tiny LEDs on its left edge, one per grace note (1 flam, 2 drag, 3 ruff), and the main LED moves a little to the right. A thin line under the main LED means the step has its own spacing or level.</li>
     <li>The <b>FLAM</b> knob sets how far before the step the grace notes start, and <b>FLAM LVL</b> how loud they are (section 11). Every flam follows these knobs unless you give it its own settings.</li>
   </ul>
   <p><b>Right-click a pad</b> to edit its flam:</p>

@@ -304,21 +304,26 @@ void StepGrid::paint (juce::Graphics& g)
             g.fillRoundedRectangle (r, 3.0f);
 
             const auto c = r.getCentre();
-            if (on && proc.patterns.flam (slot, row, s))   // flam: small grace LEDs (1 flam, 2 drag, 3 ruff), then the main one
+            if (on && proc.patterns.flam (slot, row, s))   // flam: a column of 1-3 tiny LEDs on the pad's left edge, main LED moves right
             {
                 const auto fs = proc.patterns.flamStyle (slot, row, s);
-                const float step = 4.2f;
-                const auto cm = c.translated (fs.graces * step * 0.5f + 1.0f, 0.0f);
-                const float left = cm.x - 4.5f - fs.graces * step - 1.5f;
+                const auto cm = juce::Point<float> (r.getX() + r.getWidth() * 0.58f, c.y);
                 g.setColour (juce::Colour (0xff1a1a1a));
-                g.fillRoundedRectangle (juce::Rectangle<float> (left, c.y - 5.5f, (cm.x + 5.5f) - left, 11.0f), 5.5f);
-                for (int k = 0; k < fs.graces; ++k)
-                    drawLed (g, { cm.x - 5.5f - (fs.graces - 1 - k) * step - 0.5f, c.y }, 3.8f, true, juce::Colour (0xffffb36a));
+                g.fillEllipse (juce::Rectangle<float> (11.0f, 11.0f).withCentre (cm));
                 drawLed (g, cm, 8.0f, true);
-                if (fs.spacing != 0 || fs.level != 0)   // its own spacing / level: a small mark under the pad's LEDs
+                static const float ys[4][3] = { {}, { 0.5f }, { 0.3f, 0.7f }, { 0.2f, 0.5f, 0.8f } };
+                const float gx = r.getX() + 5.5f;
+                for (int k = 0; k < fs.graces; ++k)
+                {
+                    const juce::Point<float> gc { gx, r.getY() + r.getHeight() * ys[fs.graces][k] };
+                    g.setColour (juce::Colour (0xff1a1a1a));                     // dark socket, so it shows on every pad colour
+                    g.fillEllipse (juce::Rectangle<float> (fs.graces == 3 ? 4.6f : 5.4f, fs.graces == 3 ? 4.6f : 5.4f).withCentre (gc));
+                    drawLed (g, gc, fs.graces == 3 ? 3.0f : 3.6f, true);
+                }
+                if (fs.spacing != 0 || fs.level != 0)   // its own spacing / level: a small mark under the main LED
                 {
                     g.setColour (juce::Colour (0xff1a1a1a).withAlpha (0.55f));
-                    g.fillRect (left + 1.0f, r.getBottom() - 2.5f, (cm.x + 4.5f) - left - 1.0f, 1.2f);
+                    g.fillRect (cm.x - 5.0f, r.getBottom() - 2.5f, 10.0f, 1.2f);
                 }
             }
             else if (on)
