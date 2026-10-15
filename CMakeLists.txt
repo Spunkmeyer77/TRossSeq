@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(TRossSeq VERSION 0.7.0)
+project(TRossSeq VERSION 0.7.1)
 
 # shown in the About window
 string(TIMESTAMP TSEQ_BUILD_DATE "%d %b %Y" UTC)
@@ -52,6 +52,9 @@ juce_add_plugin(TRossSeq
     MICROPHONE_PERMISSION_ENABLED FALSE
     COPY_PLUGIN_AFTER_BUILD ${TSEQ_COPY_PLUGINS})
 
+# the manual travels inside the plug-in: the About window's OPEN THE MANUAL opens this copy
+juce_add_binary_data(TRossSeqData SOURCES "docs/TRoss Seq Manual.pdf")
+
 target_sources(TRossSeq PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginEditor.cpp)
@@ -64,6 +67,7 @@ target_compile_definitions(TRossSeq PUBLIC
 
 target_link_libraries(TRossSeq
     PRIVATE
+        TRossSeqData
         juce::juce_audio_utils
     PUBLIC
         juce::juce_recommended_config_flags
@@ -78,5 +82,5 @@ if(TSEQ_BUILD_TESTS)
     target_compile_definitions(TRossSeqTest PRIVATE
         JucePlugin_Name="TRoss Seq" JucePlugin_VersionString="${PROJECT_VERSION}" JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
         TSEQ_BUILD_DATE="${TSEQ_BUILD_DATE}")
-    target_link_libraries(TRossSeqTest PRIVATE juce::juce_audio_utils juce::juce_recommended_config_flags)
+    target_link_libraries(TRossSeqTest PRIVATE TRossSeqData juce::juce_audio_utils juce::juce_recommended_config_flags)
 endif()

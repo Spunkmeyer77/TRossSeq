@@ -1,5 +1,6 @@
 #include "PluginEditor.h"
 #include "MidiExport.h"
+#include "BinaryData.h"
 
 using namespace trossseq;
 
@@ -1202,9 +1203,21 @@ AboutOverlay::AboutOverlay (TrossSeqProcessor& p) : proc (p)
     setWantsKeyboardFocus (true);
     setInterceptsMouseClicks (true, true);
     manualBtn.getProperties().set ("style", "key");
-    manualBtn.setTooltip ("Opens the TRoss Seq manual (PDF) in your web browser");
-    manualBtn.onClick = [] { juce::URL (kManualUrl).launchInDefaultBrowser(); };
+    manualBtn.setTooltip ("Opens the TRoss Seq manual (PDF) that comes inside the plug-in");
+    manualBtn.onClick = [] { if (auto f = writeManual(); f.existsAsFile()) f.startAsProcess(); };
     addAndMakeVisible (manualBtn);
+}
+
+juce::File AboutOverlay::writeManual()
+{
+    // one file per version, in the temporary folder; written again only when it's missing or different
+    auto f = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                 .getChildFile ("TRoss Seq Manual " JucePlugin_VersionString ".pdf");
+    const auto size = (juce::int64) BinaryData::TRoss_Seq_Manual_pdfSize;
+    if (! f.existsAsFile() || f.getSize() != size)
+        if (! f.replaceWithData (BinaryData::TRoss_Seq_Manual_pdf, (size_t) size))
+            return {};
+    return f;
 }
 
 void AboutOverlay::resized()

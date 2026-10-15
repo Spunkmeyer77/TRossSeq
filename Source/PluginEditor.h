@@ -164,7 +164,8 @@ public:
     explicit AboutOverlay (TrossSeqProcessor& p);
     void paint (juce::Graphics&) override;
     void resized() override;
-    static constexpr const char* kManualUrl = "https://github.com/Spunkmeyer77/TRossSeq/blob/main/docs/TRoss%20Seq%20Manual.pdf";
+    // the manual built into the plug-in, written to a temporary file; returns it (or an empty File)
+    static juce::File writeManual();
     juce::TextButton manualBtn { "OPEN THE MANUAL" };
     void mouseDown (const juce::MouseEvent&) override { setVisible (false); }
     bool keyPressed (const juce::KeyPress& k) override { if (k == juce::KeyPress::escapeKey) { setVisible (false); return true; } return false; }

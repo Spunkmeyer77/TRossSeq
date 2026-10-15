@@ -808,8 +808,13 @@ int main (int argc, char** argv)
             logo->mouseUp (e);
             check (about->isVisible(), "clicking the TRoss SEQ logo opens About");
             check (AboutOverlay::formatAndHost (proc).isNotEmpty(), "About shows the format: " + AboutOverlay::formatAndHost (proc));
-            check (about->manualBtn.isVisible() && about->card().contains (about->manualBtn.getBounds().toFloat())
-                   && juce::URL (AboutOverlay::kManualUrl).isWellFormed(), "OPEN THE MANUAL button inside the About card");
+            check (about->manualBtn.isVisible() && about->card().contains (about->manualBtn.getBounds().toFloat()), "OPEN THE MANUAL button inside the About card");
+            {
+                const auto mf = AboutOverlay::writeManual();
+                juce::MemoryBlock head; mf.loadFileAsData (head);
+                check (mf.existsAsFile() && mf.getSize() > 100000 && head.getSize() > 5 && std::memcmp (head.getData(), "%PDF-", 5) == 0,
+                       "built-in manual written as a PDF (" + juce::String (mf.getSize() / 1024) + " KB) to " + mf.getFileName());
+            }
             auto img = ed->createComponentSnapshot (ed->getLocalBounds(), true, 2.0f);
             auto f = outDir.getChildFile ("about_2x.png"); f.deleteFile();
             if (auto os = f.createOutputStream()) juce::PNGImageFormat().writeImageToStream (img, *os);
