@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TRoss Seq Manual</title>
+<style>
+  @page { size: A4; margin: 18mm 17mm 20mm 17mm; }
+  @page :first { margin: 0; }
+  :root {
+    --ink: #1d1d1d; --soft: #555; --orange: #e0531f; --dark: #242424; --silver: #d6d6d1;
+    --line: #d9d8d2; --tint: #f4f3ef; --lcd: #1a1712; --lcdtext: #ff6a2b;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: "Inter", "DejaVu Sans", sans-serif; color: var(--ink); font-size: 9.6pt; line-height: 1.5; margin: 0; }
+
+  /* ---- cover */
+  .cover { height: 297mm; width: 210mm; position: relative; background: var(--dark); color: #eee; page-break-after: always; overflow: hidden; }
+  .cover .top { background: linear-gradient(#dcdcd7, #b9b9b3); padding: 30mm 18mm 14mm; color: var(--ink); border-bottom: 3mm solid var(--orange); }
+  .cover h1 { font-size: 46pt; margin: 0; letter-spacing: -1px; font-weight: 800; line-height: 1; }
+  .cover h1 span { color: var(--orange); }
+  .cover .sub { letter-spacing: 4px; font-size: 10pt; margin-top: 4mm; color: #3a3a3a; }
+  .cover .shot { margin: 16mm 12mm 0; }
+  .cover .shot img { width: 100%; border-radius: 2mm; box-shadow: 0 2mm 6mm rgba(0,0,0,.6); }
+  .cover .meta { position: absolute; bottom: 18mm; left: 18mm; right: 18mm; display: flex; justify-content: space-between; font-size: 9pt; color: #9a9a92; letter-spacing: 1px; }
+  .cover .meta b { color: #eee; }
+
+  h2 { font-size: 17pt; margin: 0 0 3mm; padding-top: 1mm; font-weight: 800; letter-spacing: -0.3px; page-break-after: avoid; }
+  h2 .n { color: var(--orange); margin-right: 2.5mm; }
+  h3 { font-size: 11pt; margin: 6mm 0 1.5mm; page-break-after: avoid; }
+  section { page-break-before: always; }
+  section.flow { page-break-before: auto; margin-top: 10mm; }
+  p { margin: 0 0 2.6mm; }
+  ul, ol { margin: 0 0 3mm; padding-left: 5.5mm; }
+  li { margin-bottom: 1.2mm; }
+  .lead { font-size: 11pt; color: #333; }
+
+  .key { display: inline-block; font-size: 7.6pt; font-weight: 700; letter-spacing: .6px; padding: 0.3mm 1.8mm; border-radius: 1mm;
+         background: linear-gradient(#ecebe4, #c9c7bd); border: 0.25mm solid #a9a79f; border-bottom-width: 0.6mm; color: #222; white-space: nowrap; }
+  .key.rec { background: linear-gradient(#e0531f, #c2410f); color: #fff; border-color: #9c3a14; }
+  .lcd { display: inline-block; font-family: "DejaVu Sans Mono", monospace; font-weight: 700; font-size: 8pt; background: var(--lcd); color: var(--lcdtext);
+         padding: 0.2mm 1.6mm; border-radius: 0.8mm; white-space: nowrap; }
+  .mod { font-weight: 700; white-space: nowrap; }
+
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0 4mm; font-size: 8.8pt; page-break-inside: auto; }
+  tr { page-break-inside: avoid; }
+  th { text-align: left; font-size: 7.6pt; letter-spacing: 1px; text-transform: uppercase; color: var(--soft); font-weight: 600;
+       border-bottom: 0.5mm solid var(--ink); padding: 1.4mm 2mm; }
+  td { border-bottom: 0.25mm solid var(--line); padding: 1.5mm 2mm; vertical-align: top; }
+  td:first-child { white-space: nowrap; font-weight: 600; }
+  table.maps td, table.maps th { text-align: center; padding: 1.1mm 1mm; font-size: 8.2pt; }
+  table.maps td:first-child, table.maps th:first-child { text-align: left; }
+  table.maps td:first-child { font-weight: 600; }
+  .dim { color: #9a9a92; }
+
+  .note { background: var(--tint); border-left: 1.2mm solid var(--orange); padding: 2.6mm 3.5mm; margin: 3mm 0 4mm; border-radius: 0 1.5mm 1.5mm 0; page-break-inside: avoid; }
+  .note b:first-child { color: var(--orange); }
+  .steps { counter-reset: s; list-style: none; padding: 0; }
+  .steps li { counter-increment: s; position: relative; padding-left: 9mm; margin-bottom: 2.4mm; }
+  .steps li::before { content: counter(s); position: absolute; left: 0; top: -0.3mm; width: 6mm; height: 6mm; border-radius: 50%;
+                      background: var(--orange); color: #fff; font-weight: 700; font-size: 8.5pt; text-align: center; line-height: 6mm; }
+  figure { margin: 3mm 0 4mm; page-break-inside: avoid; }
+  figure img { width: 100%; border-radius: 1.5mm; border: 0.25mm solid #999; }
+  figcaption { font-size: 8pt; color: var(--soft); margin-top: 1.5mm; }
+
+  .areas { display: grid; grid-template-columns: 1fr 1fr; gap: 2.5mm 5mm; margin: 2mm 0 4mm; }
+  .area { border: 0.25mm solid var(--line); border-radius: 1.5mm; padding: 2.4mm 3mm; page-break-inside: avoid; }
+  .area h4 { margin: 0 0 1mm; font-size: 9.4pt; }
+  .area h4 span { color: var(--orange); margin-right: 1.5mm; }
+  .area p { margin: 0; font-size: 8.6pt; color: #333; }
+
+  .toc { margin-top: 4mm; columns: 2; column-gap: 10mm; }
+  .toc div { display: flex; gap: 2mm; padding: 1.1mm 0; border-bottom: 0.25mm dotted #bbb; break-inside: avoid; }
+  .toc div span:first-child { color: var(--orange); font-weight: 700; width: 6mm; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ cover -->
+<div class="cover">
+  <div class="top">
+    <h1>TRoss <span>SEQ</span></h1>
+    <div class="sub">16-STEP MIDI DRUM SEQUENCER &nbsp;·&nbsp; USER MANUAL</div>
+  </div>
+  <div class="shot"><img src="panel.png" alt="TRoss Seq panel"></div>
+  <div class="meta"><span><b>Version 0.3.0</b> &nbsp;·&nbsp; AU / VST3</span><span>Ticco Ross · 2026</span></div>
+</div>
+
+<!-- ============================================================ contents -->
+<section style="page-break-before: auto">
+  <h2>Contents</h2>
+  <div class="toc">
+    <div><span>1</span><span>What TRoss Seq does</span></div>
+    <div><span>2</span><span>Installing</span></div>
+    <div><span>3</span><span>Quick start in Ableton Live</span></div>
+    <div><span>4</span><span>The panel at a glance</span></div>
+    <div><span>5</span><span>Getting the notes to your drum machine</span></div>
+    <div><span>6</span><span>Tracks: names, notes, channels</span></div>
+    <div><span>7</span><span>Mute and momentary solo</span></div>
+    <div><span>8</span><span>Programming patterns</span></div>
+    <div><span>9</span><span>Recording from a keyboard or pads</span></div>
+    <div><span>10</span><span>The 12 pattern slots</span></div>
+    <div><span>11</span><span>Feel: velocity, accent, gate, swing</span></div>
+    <div><span>12</span><span>The randomiser</span></div>
+    <div><span>13</span><span>Exporting MIDI</span></div>
+    <div><span>14</span><span>Saving and defaults</span></div>
+    <div><span>15</span><span>Reference</span></div>
+    <div><span>16</span><span>Troubleshooting</span></div>
+  </div>
+
+  <section class="flow">
+    <h2><span class="n">1</span>What TRoss Seq does</h2>
+    <p class="lead">TRoss Seq is a 16-step drum sequencer that plays your hardware drum machines over MIDI, locked to your DAW's tempo.</p>
+    <ul>
+      <li><b>13 drum lanes plus an accent row</b>, 16 steps each, programmed on lit step pads.</li>
+      <li><b>Every lane sends its own MIDI note on its own channel</b>, so one TRoss Seq can play one drum box or several at once.</li>
+      <li><b>12 pattern slots</b>. A new slot always waits for the current pattern to finish, so changes land on the bar.</li>
+      <li><b>A drum-aware randomiser</b> that writes patterns the way each drum is usually played, with styles, density, lane locks, variations, fills and undo.</li>
+      <li><b>Two ways out</b>: straight to a MIDI port on your computer, or to your DAW's MIDI routing.</li>
+      <li>Swing, gate, accent velocity, MIDI clock out, MIDI learn, keyboard recording and MIDI file export.</li>
+    </ul>
+    <p>TRoss Seq makes no sound of its own. It is an instrument plug-in that outputs MIDI, which is why it loads on a MIDI or instrument track.</p>
+  </section>
+</section>
+
+<!-- ============================================================ install -->
+<section>
+  <h2><span class="n">2</span>Installing</h2>
+  <h3>macOS</h3>
+  <ol class="steps">
+    <li>Open <b>TRossSeq-0.3.0-macOS.pkg</b>.</li>
+    <li>The installer isn't signed, so the first time macOS blocks it. Open <b>System Settings → Privacy &amp; Security</b>, scroll down and click <b>Open Anyway</b>, then open the .pkg again.</li>
+    <li>Follow the installer. It puts the Audio Unit in <code>/Library/Audio/Plug-Ins/Components</code> and the VST3 in <code>/Library/Audio/Plug-Ins/VST3</code>. Click <b>Customize</b> to install only one of them.</li>
+    <li>In Ableton Live, open <b>Settings → Plug-Ins</b>, check that Audio Units (and/or VST3) are switched on, then hold <span class="mod">Option</span> and click <b>Rescan</b>.</li>
+  </ol>
+  <p>You'll find it in Live's browser under <b>Plug-Ins → Audio Units → Ticco Ross → TRoss Seq</b> (or under VST3).</p>
+
+  <h3>Windows</h3>
+  <p>Run <b>TRossSeq-0.3.0-Windows-Setup.exe</b>. If SmartScreen appears, click <b>More info → Run anyway</b>. The VST3 goes to <code>C:\Program Files\Common Files\VST3</code>. Rescan plug-ins in your DAW.</p>
+
+  <h3>Linux</h3>
+  <p>Unpack the <code>.tar.gz</code> and run <code>./install.sh</code>. It copies the VST3 to <code>~/.vst3</code> and the LV2 to <code>~/.lv2</code>, with no root needed. <code>./uninstall.sh</code> removes them.</p>
+
+  <h3>Updating</h3>
+  <p>Install the new version over the old one, then rescan. Your projects keep their patterns and settings. The version number is shown at the top right of the panel.</p>
+
+  <section class="flow">
+    <h2><span class="n">3</span>Quick start in Ableton Live</h2>
+    <ol class="steps">
+      <li>Connect your drum machine to your computer: a MIDI interface (DIN cable to the drum box's MIDI IN), or USB if the drum box has USB MIDI.</li>
+      <li>Create a <b>MIDI track</b> and drop <b>TRoss Seq</b> on it.</li>
+      <li>Under <b>MIDI OUT PORT</b>, pick your interface or drum box. The line underneath should read <span style="color:#3f8f3a;font-weight:700;font-size:8pt">CONNECTED</span>.</li>
+      <li>Open <span class="key">PRESETS</span> and pick the map that matches your drum box, or set each lane's <b>NOTE</b> and <b>CH</b> by hand (section 6). Most drum boxes listen on channel 10.</li>
+      <li>Press play in Live. The step lights run along with Live's transport.</li>
+      <li>Click pads to program a beat, or press <span class="key">RANDOM</span>.</li>
+    </ol>
+    <div class="note"><b>Why the MIDI OUT PORT?</b> Live doesn't pass MIDI that comes out of AU or VST3 plug-ins on to other tracks or to MIDI ports. TRoss Seq therefore sends straight to the port itself. Leave <b>HOST OUT</b> on or off as you like in Live; it has no effect there.</div>
+  </section>
+</section>
+
+<!-- ============================================================ panel -->
+<section>
+  <h2><span class="n">4</span>The panel at a glance</h2>
+  <figure><img src="panel.png" alt="TRoss Seq panel"><figcaption>TRoss Seq 0.3.0. The window can be resized from its bottom-right corner.</figcaption></figure>
+  <div class="areas">
+    <div class="area"><h4><span>A</span>Feel</h4><p>VELOCITY, ACCENT, GATE and SWING knobs (section 11). Hover a knob to see its value; double-click resets it.</p></div>
+    <div class="area"><h4><span>B</span>MIDI output</h4><p>MIDI OUT PORT selector and status line, HOST OUT, CLOCK OUT, MIDI THRU and PORT DELAY (section 5).</p></div>
+    <div class="area"><h4><span>C</span>Drum map</h4><p>PRESETS: note maps for common drum machines, all lanes on one channel, save as default (sections 6 and 14).</p></div>
+    <div class="area"><h4><span>D</span>Display</h4><p>Shows the playing pattern and what's queued next. In a DAW TRoss Seq follows the host's transport and tempo.</p></div>
+    <div class="area"><h4><span>E</span>Lanes</h4><p>Name strips (play, rename, lock), step pads, and per lane NOTE, CH, M (mute / solo) and LEARN.</p></div>
+    <div class="area"><h4><span>F</span>Patterns &amp; transport</h4><p>12 pattern buttons, LENGTH, RUN, CLEAR, REC and EXPORT MIDI.</p></div>
+    <div class="area"><h4><span>G</span>Randomiser</h4><p>DENSITY, RANDOM STYLE, and the RANDOM, FILL and UNDO keys (section 12).</p></div>
+  </div>
+
+  <h3>Display messages</h3>
+  <table>
+    <tr><th>Display</th><th>Meaning</th></tr>
+    <tr><td><span class="lcd">PATTERN 1</span></td><td>Pattern 1 is playing and is the one you're editing.</td></tr>
+    <tr><td><span class="lcd">PAT 1 &gt; 2</span></td><td>Pattern 2 is queued. It takes over when pattern 1 is back at step 1.</td></tr>
+    <tr><td><span class="lcd">PAT 1 &gt; RND</span></td><td>A random pattern (or fill / variation) is waiting for step 1.</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================ output -->
+<section>
+  <h2><span class="n">5</span>Getting the notes to your drum machine</h2>
+  <p>There are two outputs. Use one or both, but don't send both to the same drum box, or every note plays twice.</p>
+  <table>
+    <tr><th>Output</th><th>How it works</th><th>Use it in</th></tr>
+    <tr><td>MIDI OUT PORT</td><td>TRoss Seq sends straight to the port you pick: a MIDI interface, or a drum box with USB MIDI. It has its own high-priority timing, so notes don't jitter with the DAW's buffer.</td><td>Every DAW. The way to go in Ableton Live.</td></tr>
+    <tr><td>HOST OUT</td><td>The notes go to the DAW's MIDI output for the plug-in, and you route them from there.</td><td>DAWs that route plug-in MIDI: Bitwig, Reaper, Logic, Cubase, Studio One…</td></tr>
+  </table>
+
+  <h3>MIDI OUT PORT</h3>
+  <p>Click the selector to see the ports connected right now; the list refreshes each time it opens. <b>NONE</b> switches the port output off. The status line below tells you what's going on:</p>
+  <table>
+    <tr><th>Status</th><th>Meaning</th></tr>
+    <tr><td style="color:#3f8f3a">CONNECTED</td><td>Notes are going to the port.</td></tr>
+    <tr><td style="color:#e0531f">NOT CONNECTED…</td><td>The project asks for a port that isn't plugged in. Plug it in and pick it again, or pick another port.</td></tr>
+    <tr><td style="color:#e0531f">COULDN'T OPEN…</td><td>Another program holds the port (common on Windows; see section 16).</td></tr>
+  </table>
+
+  <h3>PORT DELAY</h3>
+  <p>Delays everything sent to the port by 0–250 ms, to line the drum box up with the audio coming out of your DAW. Start at about your audio buffer size (in ms) and adjust by ear against a sound in the DAW.</p>
+
+  <h3>CLOCK OUT</h3>
+  <p>Sends MIDI clock (24 ticks per quarter note), Start, Stop, Continue and Song Position to the port. Switch it on if your drum box has tempo-synced effects or its own sequencer that should follow along, and set the drum box to sync to external / MIDI clock. Clock goes to the port only.</p>
+
+  <h3>MIDI THRU</h3>
+  <p>Passes the MIDI coming into the track (your keyboard or pads) through to the outputs, so you can play the drum box live through TRoss Seq. In Live, arm the track (or set its monitor to <b>In</b>) so your keyboard reaches the plug-in.</p>
+</section>
+
+<!-- ============================================================ tracks -->
+<section>
+  <h2><span class="n">6</span>Tracks: names, notes, channels</h2>
+  <p>Each of the 13 lanes has a name strip on the left and its MIDI settings on the right.</p>
+  <table>
+    <tr><th>Control</th><th>What it does</th></tr>
+    <tr><td>Name strip</td><td><b>Click</b> to play the lane's note now. <span class="mod">Shift</span>-click plays it at accent velocity. It lights up every time the lane sends a note.</td></tr>
+    <tr><td>Rename</td><td><b>Double-click</b> the name and type up to 10 characters; <span class="mod">Return</span> keeps it, <span class="mod">Esc</span> cancels. The name also tells the randomiser what kind of drum the lane is (section 12).</td></tr>
+    <tr><td>NOTE</td><td>The MIDI note the lane sends. Drag the red read-out up or down. Note names follow Ableton's convention (C1 = 36).</td></tr>
+    <tr><td>CH</td><td>The MIDI channel, 1–16. Drag up or down.</td></tr>
+    <tr><td><span class="key">LEARN</span></td><td>Click it (it blinks), then hit a key or pad: the lane takes that note and channel.</td></tr>
+    <tr><td>Right-click a name</td><td>Rename, Learn, Randomise this lane, Lock from the randomiser.</td></tr>
+  </table>
+
+  <h3>PRESETS</h3>
+  <ul>
+    <li><b>Note maps</b> set all 13 lanes' notes, channels and names at once: General MIDI drums, Roland TR-8 / TR-8S, Korg volca beats (full table in section 15).</li>
+    <li><b>All tracks on channel…</b> moves every lane to one channel.</li>
+    <li><b>Save map + MIDI port as default</b>: new copies of TRoss Seq start with your current names, notes, channels and port.</li>
+  </ul>
+  <div class="note"><b>Check your drum box.</b> The preset maps follow each maker's published default notes. If a sound doesn't trigger, look up its note in the drum box's manual or MIDI settings and fix that lane with LEARN or the NOTE read-out.</div>
+
+  <h3>Using several drum boxes</h3>
+  <p>Give each drum box its own MIDI channel and set the lanes' CH to match: for example lanes 1–8 on channel 10 for one box, lanes 9–13 on channel 11 for another. Both boxes can sit on the same MIDI port (daisy-chained through MIDI THRU) or you can use two TRoss Seq instances with a port each.</p>
+
+  <section class="flow">
+    <h2><span class="n">7</span>Mute and momentary solo</h2>
+    <table>
+      <tr><th>Action</th><th>Result</th></tr>
+      <tr><td>Click <span class="key">M</span></td><td>Mutes the lane (the button lights yellow). Click again to unmute.</td></tr>
+      <tr><td><span class="mod">Shift</span> + hold <span class="key">M</span></td><td><b>Momentary solo.</b> The button turns blue and shows <b>S</b>; only that lane plays, even if it is muted itself, and every other lane goes quiet. Let go of the mouse button and everything is back exactly as it was. Nothing is toggled.</td></tr>
+    </table>
+    <p>Mutes can be automated in your DAW (<i>Track 1 Mute</i> … <i>Track 13 Mute</i>). They don't affect clicks on the name strips or MIDI THRU.</p>
+  </section>
+</section>
+
+<!-- ============================================================ programming -->
+<section>
+  <h2><span class="n">8</span>Programming patterns</h2>
+  <ul>
+    <li><b>Click a pad</b> to switch a step on or off. <b>Drag along a lane</b> to paint several steps on (or off, if you started on a lit pad).</li>
+    <li>The pads are coloured in groups of four, so the beats are easy to see. The LEDs above follow the playing step, and the playing column gets a white outline.</li>
+    <li><b>ACCENT row:</b> on any step where it's lit, every lane plays at the ACCENT velocity instead of the VELOCITY.</li>
+  </ul>
+  <table>
+    <tr><th>Control</th><th>What it does</th></tr>
+    <tr><td>LENGTH</td><td>Pattern length, 1–16 steps. Drag the red read-out up or down; double-click for 16. Steps past the length are dimmed and don't play. Use odd lengths for patterns that drift against the bar.</td></tr>
+    <tr><td><span class="key">RUN</span></td><td>Sequencer on/off. With RUN off, the steps still advance but send nothing; MIDI THRU and the name strips keep working.</td></tr>
+    <tr><td><span class="key">CLEAR</span></td><td>Clears the pattern that's playing, accent row included. (RANDOM's UNDO doesn't bring a cleared pattern back.)</td></tr>
+  </table>
+  <p>TRoss Seq always follows the DAW: it starts, stops, loops and jumps with the transport, and step 1 falls on the downbeat of each bar. When the transport stops, any note still held gets its note-off.</p>
+
+  <section class="flow">
+    <h2><span class="n">9</span>Recording from a keyboard or pads</h2>
+    <p>With <span class="key rec">REC</span> on (it is by default) and the song playing, every incoming note that matches a lane is written into the nearest step of the playing pattern. Swing is taken into account.</p>
+    <ul>
+      <li>A note matches a lane by <b>note and channel</b> first, then by <b>note alone</b>, so a keyboard on channel 1 still records into lanes that send on channel 10.</li>
+      <li>Velocity above 100 also sets the accent on that step.</li>
+      <li>Clicking a name strip while playing records too (<span class="mod">Shift</span>-click for an accent).</li>
+      <li>While the transport is stopped, nothing is recorded; hits just play.</li>
+    </ul>
+    <p>Switch REC off to play along without writing anything.</p>
+  </section>
+</section>
+
+<!-- ============================================================ patterns -->
+<section>
+  <h2><span class="n">10</span>The 12 pattern slots</h2>
+  <ul>
+    <li><b>Click a pattern button</b> to select it. While the song plays, the new slot waits until the current pattern reaches step 1 (its LED blinks while queued), so changes always land cleanly. While stopped, it switches at once.</li>
+    <li>The LED shows the slot that's playing; the light cap shows the selected one. A small dash marks empty slots.</li>
+    <li><b>Right-click a pattern button</b> to <b>Copy to</b> another slot, or <b>Clear</b> it.</li>
+    <li>The <i>Pattern</i> parameter can be automated, so you can arrange pattern changes in your DAW's timeline.</li>
+  </ul>
+
+  <section class="flow">
+    <h2><span class="n">11</span>Feel: velocity, accent, gate, swing</h2>
+    <table>
+      <tr><th>Knob</th><th>Range</th><th>What it does</th></tr>
+      <tr><td>VELOCITY</td><td>1–127</td><td>Velocity of normal steps. Default 100.</td></tr>
+      <tr><td>ACCENT</td><td>1–127</td><td>Velocity of steps with the ACCENT row lit, and of <span class="mod">Shift</span>-clicked name strips. Default 127.</td></tr>
+      <tr><td>GATE</td><td>5–95 %</td><td>How long each note is held, as a fraction of a 16th note. Most drum boxes only care about the note-on; longer gates matter for sounds that respond to note length.</td></tr>
+      <tr><td>SWING</td><td>50–75 %</td><td>50 % is straight. Higher values push every second 16th (steps 2, 4, 6…) later: 54–58 % is a light shuffle, 66.7 % a triplet feel, 75 % the maximum.</td></tr>
+    </table>
+  </section>
+</section>
+
+<!-- ============================================================ random -->
+<section>
+  <h2><span class="n">12</span>The randomiser</h2>
+  <p class="lead">The randomiser writes patterns lane by lane, the way each drum is usually played, instead of throwing random dots on the grid.</p>
+  <table>
+    <tr><th>Control</th><th>What it does</th></tr>
+    <tr><td><span class="key">RANDOM</span></td><td>Writes a <b>whole new pattern</b> into the playing slot. Every unlocked lane is rewritten over the current LENGTH. <b>The ACCENT row is never changed.</b></td></tr>
+    <tr><td><span class="mod">Shift</span>-click <span class="key">RANDOM</span></td><td>A <b>variation</b>: only a few steps of a few lanes change, and the anchors (kick on step 1, the backbeat) stay. Good for keeping a groove alive without losing it.</td></tr>
+    <tr><td><span class="key">FILL</span></td><td>Rewrites only the <b>last four steps</b> of the pattern with a fill: toms, snare, hats and percussion. Press it before the bar you want the fill in.</td></tr>
+    <tr><td><span class="key">UNDO</span></td><td>Goes back to the pattern as it was before the last RANDOM, variation, fill or lane randomise; up to 32 steps back. Greyed out when there's nothing to undo.</td></tr>
+    <tr><td>DENSITY</td><td>How busy random patterns are. 50 % follows the style as designed; lower is sparser, higher is busier. The anchors (kick on 1, the backbeat in STRAIGHT) are kept at any density.</td></tr>
+    <tr><td>RANDOM STYLE</td><td>The character of what RANDOM and the variation write (below).</td></tr>
+    <tr><td><span class="mod">Alt</span>-click a name<br><span class="dim" style="font-weight:400">(<span class="mod">Option</span>-click on a Mac)</span></td><td><b>Locks</b> the lane: a padlock appears and RANDOM, the variation and FILL leave it alone. Alt-click again to unlock. Locks are saved with the project.</td></tr>
+    <tr><td>Right-click a name → <b>Randomise this lane</b></td><td>Rolls just that one lane, even if it's locked.</td></tr>
+  </table>
+
+  <h3>Timing</h3>
+  <p>While the song plays, a random result <b>waits for step 1</b>, so the pattern never changes in the middle of a bar. The RANDOM key's light blinks and the display shows <span class="lcd">PAT 1 &gt; RND</span> until it takes over. Press RANDOM again while it's waiting to roll a different one; press UNDO to cancel it. While stopped, results are written at once.</p>
+
+  <h3>Styles</h3>
+  <table>
+    <tr><th>Style</th><th>Character</th></tr>
+    <tr><td>STRAIGHT</td><td>Four on the floor: kick on the beats with the odd extra, snare always on the backbeat (steps 5 and 13), 8th-note hats with some 16ths, open hats on the off-beats, toms near the end of the bar.</td></tr>
+    <tr><td>ELECTRO</td><td>Syncopated kick (always on step 1, then pushed around steps 4, 7, 11 and 12), snare on step 13 and usually 5, clap mostly on 13, busy 16th hats, occasional open hats and tom fills.</td></tr>
+    <tr><td>BROKEN</td><td>Scattered and off the grid: kick on 1, then anywhere; snare not tied to the backbeat; looser hats and more percussion.</td></tr>
+  </table>
+
+  <h3>How lanes are recognised</h3>
+  <p>The randomiser decides what each lane is from its <b>name</b> first, so renaming a lane changes how it's treated. If the name doesn't say, it goes by the lane's <b>General MIDI note</b>.</p>
+  <table>
+    <tr><th>Treated as</th><th>Names that count</th><th>GM notes</th><th>Plays like</th></tr>
+    <tr><td>Kick</td><td>BD, KICK, BASS…</td><td>35, 36</td><td>Anchored on step 1, plus beats or syncopation</td></tr>
+    <tr><td>Snare</td><td>SD, SNARE</td><td>38, 40</td><td>Backbeat, ghost notes</td></tr>
+    <tr><td>Clap</td><td>CP, HC, CLAP</td><td>39</td><td>Backbeat, sometimes</td></tr>
+    <tr><td>Closed hat</td><td>CH, HH, CLOSED, CL HAT, HAT</td><td>42, 44</td><td>Busy 8ths and 16ths</td></tr>
+    <tr><td>Open hat</td><td>OH, OPEN, OP HAT</td><td>46</td><td>Off-beats, never on the same step as a closed hat</td></tr>
+    <tr><td>Cymbal</td><td>CY, CC, RD, RC, CRASH, RIDE</td><td>49, 51, 52, 53, 55, 57, 59</td><td>Rare, mostly on step 1</td></tr>
+    <tr><td>Tom</td><td>TOM, LT, MT, HT</td><td>41, 43, 45, 47, 48, 50</td><td>Sparse, near the end of the bar</td></tr>
+    <tr><td>Percussion</td><td>RS, RIM, CB, COWBELL, CL, CLAVES, AGOGO, CONGA…</td><td>everything else</td><td>Sparse off-beat accents</td></tr>
+  </table>
+  <div class="note"><b>Workflow tip.</b> Program or keep a kick and snare you like, Alt-click to lock them, then press RANDOM until the hats and percussion groove. Shift-click RANDOM for variations, FILL before a change, and UNDO whenever you've gone one roll too far.</div>
+</section>
+
+<!-- ============================================================ export -->
+<section>
+  <h2><span class="n">13</span>Exporting MIDI</h2>
+  <p>Click <span class="key">EXPORT MIDI</span> for a menu:</p>
+  <ul>
+    <li><b>Pattern N (playing)</b> saves the playing pattern as a <code>.mid</code> file.</li>
+    <li><b>All patterns, in a row</b> saves every non-empty slot one after another in a single file.</li>
+    <li><b>All patterns as separate files</b> saves one file per non-empty slot into a folder you choose.</li>
+  </ul>
+  <p><b>Drag</b> the EXPORT MIDI key onto a MIDI track in your DAW to drop the playing pattern in as a clip.</p>
+  <p>Exported files use each lane's note and channel, the current VELOCITY, ACCENT, GATE, SWING, LENGTH and the song tempo, with 16th-note steps.</p>
+
+  <section class="flow">
+    <h2><span class="n">14</span>Saving and defaults</h2>
+    <p>Everything is saved with your DAW project: all 12 patterns, the playing slot, lane names, notes, channels, locks, every knob and switch, and the MIDI port. If the saved port isn't connected when the project opens, the status line says so, and TRoss Seq reconnects to a port with the same name when it's available.</p>
+    <p><b>PRESETS → Save map + MIDI port as default</b> stores your lane names, notes, channels, locks and port, and every new copy of TRoss Seq starts with them.</p>
+  </section>
+</section>
+
+<!-- ============================================================ reference -->
+<section>
+  <h2><span class="n">15</span>Reference</h2>
+  <h3>Preset note maps</h3>
+  <table class="maps">
+    <tr><th>Lane</th><th colspan="2">General MIDI (ch 10)</th><th colspan="2">Roland TR-8 / TR-8S (ch 10)</th><th colspan="2">Korg volca beats (ch 10)</th></tr>
+    <tr><td>1</td><td>BD</td><td>36</td><td>BD</td><td>36</td><td>KICK</td><td>36</td></tr>
+    <tr><td>2</td><td>SD</td><td>38</td><td>SD</td><td>38</td><td>SNARE</td><td>38</td></tr>
+    <tr><td>3</td><td>LT</td><td>45</td><td>LT</td><td>43</td><td>LO TOM</td><td>43</td></tr>
+    <tr><td>4</td><td>HT</td><td>50</td><td>HT</td><td>50</td><td>HI TOM</td><td>50</td></tr>
+    <tr><td>5</td><td>CP</td><td>39</td><td>HC</td><td>39</td><td>CLAP</td><td>39</td></tr>
+    <tr><td>6</td><td>CH</td><td>42</td><td>CH</td><td>42</td><td>CL HAT</td><td>42</td></tr>
+    <tr><td>7</td><td>OH</td><td>46</td><td>OH</td><td>46</td><td>OP HAT</td><td>46</td></tr>
+    <tr><td>8</td><td>CY</td><td>49</td><td>CC</td><td>49</td><td>CRASH</td><td>49</td></tr>
+    <tr><td>9</td><td>RS</td><td>37</td><td>RS</td><td>37</td><td>CLAVES</td><td>75</td></tr>
+    <tr><td>10</td><td>MT</td><td>47</td><td>MT</td><td>47</td><td>AGOGO</td><td>67</td></tr>
+    <tr><td>11</td><td>RD</td><td>51</td><td>RC</td><td>51</td><td class="dim">RIM</td><td class="dim">37</td></tr>
+    <tr><td>12</td><td>CB</td><td>56</td><td>CB</td><td>56</td><td class="dim">MID TOM</td><td class="dim">47</td></tr>
+    <tr><td>13</td><td>CL</td><td>75</td><td>CL</td><td>75</td><td class="dim">RIDE</td><td class="dim">51</td></tr>
+  </table>
+  <p class="dim" style="font-size:8pt">Lanes in grey are spare: those notes are not part of the drum box's own map. Point them at another drum box or reuse them.</p>
+
+  <h3>Mouse and keyboard</h3>
+  <div class="two">
+  <table>
+    <tr><th>Where</th><th>Action</th></tr>
+    <tr><td>Step pad</td><td>Click: on/off · Drag: paint</td></tr>
+    <tr><td>Name strip</td><td>Click: play · Shift: accent</td></tr>
+    <tr><td></td><td>Double-click: rename</td></tr>
+    <tr><td></td><td>Alt / Option-click: lock</td></tr>
+    <tr><td></td><td>Right-click: menu</td></tr>
+    <tr><td>M</td><td>Click: mute · Shift + hold: solo</td></tr>
+  </table>
+  <table>
+    <tr><th>Where</th><th>Action</th></tr>
+    <tr><td>RANDOM</td><td>Click: new · Shift: variation</td></tr>
+    <tr><td>Pattern button</td><td>Click: select · Right-click: copy / clear</td></tr>
+    <tr><td>Knob</td><td>Drag · Double-click: default</td></tr>
+    <tr><td>Red read-outs</td><td>Drag up / down</td></tr>
+    <tr><td>EXPORT MIDI</td><td>Click: menu · Drag: clip</td></tr>
+  </table>
+  </div>
+
+  <h3>Automatable parameters</h3>
+  <p>Run · Length · Pattern · Record · Velocity · Accent Velocity · Gate · Swing · Port Delay · MIDI Thru · Host Out · Clock Out · Random Density · Random Style · Track 1–13 Mute</p>
+</section>
+
+<!-- ============================================================ troubleshooting -->
+<section>
+  <h2><span class="n">16</span>Troubleshooting</h2>
+  <table>
+    <tr><th>Problem</th><th>What to check</th></tr>
+    <tr><td>The drum box plays nothing</td><td>Is the song playing and RUN on? Does the MIDI OUT PORT status read CONNECTED? Do the lanes' CH match the channel the drum box listens on (often 10)? Are the notes right for your drum box (PRESETS, LEARN)? Is the lane muted? In Live, remember HOST OUT does nothing; use the port.</td></tr>
+    <tr><td>Every note plays twice</td><td>Both outputs reach the same drum box. Turn HOST OUT off, or set MIDI OUT PORT to NONE.</td></tr>
+    <tr><td>One sound doesn't trigger</td><td>That lane's note isn't what the drum box expects. Click LEARN on the lane and hit the pad on the drum box (if it sends MIDI), or look up the note in its manual.</td></tr>
+    <tr><td>Port shows COULDN'T OPEN (Windows)</td><td>Most Windows MIDI drivers let only one program use a port. Switch that port off in your DAW's MIDI settings, close other MIDI apps, then pick it again in TRoss Seq.</td></tr>
+    <tr><td>Port shows NOT CONNECTED</td><td>The port saved in the project isn't plugged in. Connect it and pick it again, or choose another.</td></tr>
+    <tr><td>Drum box is early or late against the DAW</td><td>Adjust PORT DELAY until they line up.</td></tr>
+    <tr><td>Drum box's tempo / effects don't follow</td><td>Switch CLOCK OUT on and set the drum box to sync to external MIDI clock.</td></tr>
+    <tr><td>RANDOM doesn't change anything at once</td><td>While playing, the result waits for step 1; the display shows <span class="lcd">PAT 1 &gt; RND</span>. Check the lane isn't locked (padlock).</td></tr>
+    <tr><td>Keyboard doesn't play or record</td><td>In Live, arm the track or set monitor to In. MIDI THRU must be on to pass it to the drum box; REC must be on and the song playing to record.</td></tr>
+    <tr><td>TRoss Seq doesn't appear in Live</td><td>Rescan plug-ins (Option-click Rescan on a Mac). Check Audio Units / VST3 are switched on in Settings → Plug-Ins. On a Mac, check the installer actually ran (Privacy &amp; Security → Open Anyway).</td></tr>
+  </table>
+</section>
+
+</body>
+</html>

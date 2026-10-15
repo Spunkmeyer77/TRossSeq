@@ -193,6 +193,11 @@ private:
     juce::Slider* chanBox[trossseq::kNumTracks] {};
     juce::TextButton* learnBtn[trossseq::kNumTracks] {};
     juce::TextButton clearBtn { "CLEAR" }, mapBtn { "PRESETS" };
+    juce::TextButton randomBtn { "RANDOM" }, fillBtn { "FILL" }, undoBtn { "UNDO" };
+    juce::ComboBox styleBox;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> styleAtt;
+    bool lastPendingRnd = false;
+    int lastLockVersion = -1;
     // standalone app only
     juce::TextButton playBtn { "PLAY" };
     juce::Slider bpmBox;

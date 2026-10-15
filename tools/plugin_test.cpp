@@ -5,6 +5,7 @@
 #include "../Source/PluginProcessor.h"
 #include "../Source/MidiExport.h"
 #include "../Source/PluginEditor.h"
+#include "../Source/Randomizer.h"
 
 using namespace trossseq;
 
@@ -292,6 +293,130 @@ int main (int argc, char** argv)
         check (std::abs (tempo - 128.0) < 0.01 && std::abs (lastTick - 16 * 24) < 0.5, "export: 128 BPM, 16 steps long");
     }
 
+    // 14b. randomiser
+    {
+        // lane roles from names, then notes
+        check (roleFor ("BD", 36) == Role::Kick && roleFor ("CL", 75) == Role::Perc && roleFor ("CL HAT", 42) == Role::ClosedHat
+               && roleFor ("OP HAT", 46) == Role::OpenHat && roleFor ("LO TOM", 43) == Role::Tom && roleFor ("Kick 2", 0) == Role::Kick
+               && roleFor ("X", 46) == Role::OpenHat && roleFor ("RD", 51) == Role::Cymbal, "lane roles from names, then MIDI notes");
+
+        // engine on its own: 200 patterns per style
+        Randomizer rz (1234);
+        LaneInfo lanes[kNumTracks];
+        const char* nm[kNumTracks] = { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY", "RS", "MT", "RD", "CB", "CL" };
+        const int nt[kNumTracks] = { 36, 38, 45, 50, 39, 42, 46, 49, 37, 47, 51, 56, 75 };
+        for (int t = 0; t < kNumTracks; ++t) lanes[t] = { roleFor (nm[t], nt[t]), false };
+        lanes[1].locked = true;   // SD locked
+        bool ok = true, hatsClash = false, pastLen = false, lockedKept = true, accentKept = true;
+        int kickHits = 0, hatHits = 0, tomHits = 0;
+        for (int st = 0; st < kNumStyles; ++st)
+            for (int i = 0; i < 200; ++i)
+            {
+                uint16_t rows[kNumRows] {};
+                rows[0] = 0x0101; rows[2] = 0x1234;
+                rz.generate (rows, lanes, 12, (Style) st, 50.0f);
+                ok &= (rows[1] & 1) != 0;                       // kick on step 1, always
+                hatsClash |= (rows[6] & rows[7]) != 0;          // CH (row 6) and OH (row 7)
+                for (int r = 1; r < kNumRows; ++r) if (r != 2) pastLen |= (rows[r] & 0xF000) != 0;
+                lockedKept &= rows[2] == 0x1234;
+                accentKept &= rows[0] == 0x0101;
+                kickHits += __builtin_popcount (rows[1]); hatHits += __builtin_popcount (rows[6]); tomHits += __builtin_popcount (rows[3]);
+            }
+        check (ok, "random: kick always on step 1");
+        check (! hatsClash, "random: open and closed hat never on the same step");
+        check (! pastLen, "random: nothing past LENGTH (12)");
+        check (lockedKept, "random: locked lane (SD) untouched");
+        check (accentKept, "random: accent row untouched");
+        check (hatHits > kickHits && kickHits > tomHits, "random: hats busiest, toms sparsest (CH " + juce::String (hatHits)
+               + ", BD " + juce::String (kickHits) + ", LT " + juce::String (tomHits) + ")");
+
+        lanes[1].locked = false;
+        int lowHits = 0, highHits = 0; bool straightSnare = true;
+        for (int i = 0; i < 100; ++i)
+        {
+            uint16_t a[kNumRows] {}, b[kNumRows] {};
+            rz.generate (a, lanes, 16, Style::Straight, 10.0f);
+            rz.generate (b, lanes, 16, Style::Straight, 90.0f);
+            for (int r = 1; r < kNumRows; ++r) { lowHits += __builtin_popcount (a[r]); highHits += __builtin_popcount (b[r]); }
+            straightSnare &= (a[2] & 0x1010) == 0x1010;
+        }
+        check (highHits > lowHits * 2, "DENSITY: 90 % gives far busier patterns than 10 % (" + juce::String (highHits) + " vs " + juce::String (lowHits) + ")");
+        check (straightSnare, "STRAIGHT: snare always on the backbeat (steps 5 and 13)");
+
+        // mutate: a few steps change, locked lanes don't
+        int diffTotal = 0, maxDiff = 0; bool mutLock = true;
+        lanes[0].locked = true;
+        for (int i = 0; i < 100; ++i)
+        {
+            uint16_t r0[kNumRows] {};
+            rz.generate (r0, lanes, 16, Style::Electro, 50.0f);
+            r0[1] = 0x1111;
+            uint16_t r1[kNumRows]; std::copy (r0, r0 + kNumRows, r1);
+            rz.mutate (r1, lanes, 16, Style::Electro, 50.0f);
+            int d = 0;
+            for (int r = 1; r < kNumRows; ++r) d += __builtin_popcount (r0[r] ^ r1[r]);
+            diffTotal += d; maxDiff = juce::jmax (maxDiff, d);
+            mutLock &= r1[1] == 0x1111;
+        }
+        check (diffTotal > 0 && maxDiff <= 8, "MUTATE: small changes (at most " + juce::String (maxDiff) + " steps)");
+        check (mutLock, "MUTATE: locked lane untouched");
+        lanes[0].locked = false;
+
+        // fill: only the last four steps change
+        bool fillOnly = true; int fillChanged = 0;
+        for (int i = 0; i < 100; ++i)
+        {
+            uint16_t r0[kNumRows] {};
+            rz.generate (r0, lanes, 16, Style::Straight, 50.0f);
+            uint16_t r1[kNumRows]; std::copy (r0, r0 + kNumRows, r1);
+            rz.fill (r1, lanes, 16, 50.0f);
+            for (int r = 1; r < kNumRows; ++r) { fillOnly &= ((r0[r] ^ r1[r]) & 0x0FFF) == 0; fillChanged += __builtin_popcount (r0[r] ^ r1[r]); }
+        }
+        check (fillOnly && fillChanged > 0, "FILL: only steps 13-16 change");
+
+        // through the plug-in: stopped = at once, playing = waits for step 1, UNDO
+        host.playing = false;
+        run (2);
+        const int slot = proc.getCurrentSlot();
+        pats.clear (slot);
+        pats.setCell (slot, 0, 3, true);   // accent on step 4
+        pats.setCell (slot, 11, 9, true);  // RD on step 10
+        proc.toggleLock (10);              // lock RD
+        proc.randomise (TrossSeqProcessor::RandomOp::NewPattern);
+        check (pats.cell (slot, 1, 0) && pats.get (slot, 0) == (1 << 3) && pats.get (slot, 11) == (1 << 9),
+               "RANDOM while stopped: written at once, accent and locked lane kept");
+        const auto afterFirst = pats.get (slot, 6);
+        juce::uint16 before[kNumRows];
+        for (int r = 0; r < kNumRows; ++r) before[r] = pats.get (slot, r);
+
+        host.playing = true; host.ppq = 1.0;   // beat 2 of the bar
+        run (2);
+        proc.randomise (TrossSeqProcessor::RandomOp::NewPattern);
+        bool unchanged = true;
+        for (int r = 0; r < kNumRows; ++r) unchanged &= pats.get (slot, r) == before[r];
+        check (proc.isRandomPending() && unchanged, "RANDOM while playing: waits, pattern unchanged mid-bar");
+        lastStep = -1;
+        run (200);
+        check (! proc.isRandomPending(), "the random pattern takes over on step 1");
+        proc.undoRandom();
+        bool restored = true;
+        for (int r = 0; r < kNumRows; ++r) restored &= pats.get (slot, r) == before[r];
+        check (restored, "UNDO brings back the previous pattern");
+        proc.randomise (TrossSeqProcessor::RandomOp::NewPattern);
+        proc.randomise (TrossSeqProcessor::RandomOp::NewPattern);   // second click while still waiting
+        check (proc.isRandomPending() && proc.undoRandom() && ! proc.isRandomPending(), "UNDO while waiting cancels it");
+        restored = true;
+        for (int r = 0; r < kNumRows; ++r) restored &= pats.get (slot, r) == before[r];
+        check (restored, "...and the pattern is as it was");
+        proc.undoRandom();
+        juce::ignoreUnused (afterFirst);
+        check (pats.get (slot, 1) == 0 && pats.get (slot, 11) == (1 << 9) && ! proc.canUndo(), "UNDO again goes back to before the first RANDOM");
+        host.playing = false;
+        run (2);
+        proc.randomise (TrossSeqProcessor::RandomOp::Lane, 5);   // CH only
+        check (pats.get (slot, 6) != 0 && pats.get (slot, 1) == 0, "Randomise this lane: only CH written");
+    }
+
     // 15. state round trip: patterns, map, names, slot
     juce::MemoryBlock state; proc.getStateInformation (state);
     {
@@ -302,6 +427,7 @@ int main (int argc, char** argv)
             for (int r = 0; r < kNumRows; ++r)
                 same &= other.patterns.get (s, r) == pats.get (s, r);
         check (same, "all 12 patterns restored");
+        check (other.locked[10].load() && ! other.locked[0].load(), "lane locks restored");
         check (other.map.note (6) == 51 && other.map.channel (0) == 3 && other.getTrackName (6) == "RIDE"
                && other.getTrackName (0) == "KICK", "track notes, channels and names restored");
     }
@@ -309,11 +435,13 @@ int main (int argc, char** argv)
     proc.setStateInformation (state.getData(), (int) state.getSize());
     check ((int) proc.apvts.getRawParameterValue ("velocity")->load() == 100, "parameters restored");
 
-    // editor snapshot at 1x and 2x
+    // editor snapshot at 1x and 2x: an Electro random pattern, RD locked
     proc.applyPreset (0);
-    put (0, 3, "..x.......x.....");
-    put (0, 7, "..............x.");
-    put (0, 8, "x...............");
+    setP ("rstyle", 1.0f);
+    pats.clear (0);
+    pats.setCell (0, 0, 0, true); pats.setCell (0, 0, 12, true);
+    { juce::Random r (7); for (int i = 0; i < 3; ++i) proc.randomise (TrossSeqProcessor::RandomOp::NewPattern); }
+    juce::Thread::sleep (400);   // let the name-strip flashes fade
     std::unique_ptr<juce::AudioProcessorEditor> ed (proc.createEditor());
 
     // the M button with the mouse: Shift-press = momentary solo, nothing toggled; plain click = mute toggle

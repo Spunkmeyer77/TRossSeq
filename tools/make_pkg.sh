@@ -19,7 +19,7 @@ DEV_ID_APP="${DEV_ID_APP:-}"
 DEV_ID_INSTALLER="${DEV_ID_INSTALLER:-}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-}"
 
-for f in "$ART/AU/TRoss Seq.component" "$ART/VST3/TRoss Seq.vst3" "$ART/Standalone/TRoss Seq.app"; do
+for f in "$ART/AU/TRoss Seq.component" "$ART/VST3/TRoss Seq.vst3"; do
     [ -e "$f" ] || { echo "Missing $f - run the Release build first."; exit 1; }
 done
 
@@ -31,7 +31,7 @@ mkdir -p "$WORK/resources"
 # The build adds files to the VST3 after linking (moduleinfo.json), which breaks the linker's
 # automatic signature; macOS then refuses to load it and hosts like Live skip the VST3.
 # Without a Developer ID they get an ad-hoc signature ("-"), which Macs accept for local plug-ins.
-for f in "$ART/AU/TRoss Seq.component" "$ART/VST3/TRoss Seq.vst3" "$ART/Standalone/TRoss Seq.app"; do
+for f in "$ART/AU/TRoss Seq.component" "$ART/VST3/TRoss Seq.vst3"; do
     if [ -n "$DEV_ID_APP" ]; then
         echo "==> Signing $(basename "$f") with $DEV_ID_APP"
         codesign --force --deep --options runtime --timestamp --sign "$DEV_ID_APP" "$f"
@@ -60,14 +60,13 @@ stage() {
 
 stage au   "$ART/AU/TRoss Seq.component"   "/Library/Audio/Plug-Ins/Components"
 stage vst3 "$ART/VST3/TRoss Seq.vst3"      "/Library/Audio/Plug-Ins/VST3"
-stage app  "$ART/Standalone/TRoss Seq.app" "/Applications"
 
 cat > "$WORK/resources/welcome.html" <<EOF
 <html><body style="font-family:-apple-system,Helvetica;font-size:13px">
 <h2>TRoss Seq $VERSION</h2>
 <p>16-step MIDI drum sequencer &middot; Ticco Ross 2026</p>
-<p>This installs the Audio Unit, the VST3 plug-in and the standalone app.
-Click <b>Customize</b> on the next screen to skip any of them.</p>
+<p>This installs the Audio Unit and the VST3 plug-in.
+Click <b>Customize</b> on the next screen to skip either of them.</p>
 <p>After installing, rescan plug-ins in your DAW
 (Ableton Live: Settings &rarr; Plug-Ins, hold Option and click Rescan).</p>
 </body></html>
@@ -84,7 +83,6 @@ cat > "$WORK/distribution.xml" <<EOF
     <choices-outline>
         <line choice="au"/>
         <line choice="vst3"/>
-        <line choice="app"/>
     </choices-outline>
     <choice id="au" title="Audio Unit" description="TRoss Seq.component for Logic, Ableton Live, GarageBand...">
         <pkg-ref id="$ID.au"/>
@@ -92,12 +90,8 @@ cat > "$WORK/distribution.xml" <<EOF
     <choice id="vst3" title="VST3" description="TRoss Seq.vst3 for VST3 hosts">
         <pkg-ref id="$ID.vst3"/>
     </choice>
-    <choice id="app" title="Standalone app" description="TRoss Seq.app in Applications">
-        <pkg-ref id="$ID.app"/>
-    </choice>
     <pkg-ref id="$ID.au"   version="$VERSION" onConclusion="none">au.pkg</pkg-ref>
     <pkg-ref id="$ID.vst3" version="$VERSION" onConclusion="none">vst3.pkg</pkg-ref>
-    <pkg-ref id="$ID.app"  version="$VERSION" onConclusion="none">app.pkg</pkg-ref>
 </installer-gui-script>
 EOF
 

@@ -11,25 +11,23 @@ STAGE="dist/$NAME"
 rm -rf "$STAGE" && mkdir -p "$STAGE"
 cp -R "$ART/VST3/TRoss Seq.vst3"   "$STAGE/"
 cp -R "$ART/LV2/TRoss Seq.lv2"     "$STAGE/"
-cp    "$ART/Standalone/TRoss Seq"  "$STAGE/"
 
 cat > "$STAGE/install.sh" <<'EOS'
 #!/bin/bash
 # Installs TRoss Seq for the current user (no root needed).
 set -e
 cd "$(dirname "$0")"
-mkdir -p ~/.vst3 ~/.lv2 ~/.local/bin
+mkdir -p ~/.vst3 ~/.lv2
 rm -rf ~/.vst3/"TRoss Seq.vst3" ~/.lv2/"TRoss Seq.lv2"
 cp -R "TRoss Seq.vst3" ~/.vst3/
 cp -R "TRoss Seq.lv2"  ~/.lv2/
-cp "TRoss Seq" ~/.local/bin/TRossSeq && chmod +x ~/.local/bin/TRossSeq
-echo "Installed: ~/.vst3/TRoss Seq.vst3, ~/.lv2/TRoss Seq.lv2, ~/.local/bin/TRossSeq"
+echo "Installed: ~/.vst3/TRoss Seq.vst3, ~/.lv2/TRoss Seq.lv2"
 echo "Rescan plug-ins in your DAW (Bitwig, Reaper, Ardour...)."
 EOS
 
 cat > "$STAGE/uninstall.sh" <<'EOS'
 #!/bin/bash
-rm -rf ~/.vst3/"TRoss Seq.vst3" ~/.lv2/"TRoss Seq.lv2" ~/.local/bin/TRossSeq
+rm -rf ~/.vst3/"TRoss Seq.vst3" ~/.lv2/"TRoss Seq.lv2"
 echo "TRoss Seq removed."
 EOS
 chmod +x "$STAGE/install.sh" "$STAGE/uninstall.sh"
@@ -37,7 +35,7 @@ chmod +x "$STAGE/install.sh" "$STAGE/uninstall.sh"
 cat > "$STAGE/README.txt" <<EOS
 TRoss Seq $VERSION - 16-step MIDI drum sequencer - Ticco Ross 2026
 
-Install:    ./install.sh      (VST3 -> ~/.vst3, LV2 -> ~/.lv2, app -> ~/.local/bin/TRossSeq)
+Install:    ./install.sh      (VST3 -> ~/.vst3, LV2 -> ~/.lv2)
 Uninstall:  ./uninstall.sh
 Needs: ALSA, X11, FreeType (standard on desktop distributions).
 EOS

@@ -71,6 +71,7 @@ juce::String noteName (int n)
 // ---- layout (kWidth x kHeight)
 constexpr int kMargin = 18, kTopH = 124, kSeqY = 127;
 constexpr int kMasterX = 984, kMasterW = 118;
+constexpr int kRndY = kSeqY + 212;   // randomiser block, under the pattern buttons
 
 // lower section, in StepGrid coordinates (the grid sits at 0, kSeqY)
 constexpr float kGridX = 104.0f, kGridR = 690.0f, kColGap = 5.0f, kPadTop = 46.0f, kRowPitch = 20.0f, kPadH = 16.0f;
@@ -383,6 +384,15 @@ void NameStrip::paint (juce::Graphics& g)
     g.setColour ((bg.getPerceivedBrightness() > 0.5f ? col::stripBg : col::stripText).withAlpha (silenced ? 0.3f : 1.0f));
     g.setFont (font (10.0f, true, 0.1f));
     g.drawText (proc.getTrackName (track), getLocalBounds(), juce::Justification::centred);
+    if (proc.locked[track].load())   // padlock: the randomiser leaves this lane alone
+    {
+        const float x = r.getX() + 5.0f, y = r.getCentreY() - 1.0f;
+        g.setColour (col::accText);
+        juce::Path shackle;
+        shackle.addCentredArc (x + 3.0f, y, 2.2f, 2.6f, 0.0f, -juce::MathConstants<float>::halfPi, juce::MathConstants<float>::halfPi, true);
+        g.strokePath (shackle, juce::PathStrokeType (1.2f));
+        g.fillRoundedRectangle (x, y, 6.0f, 4.5f, 0.8f);
+    }
     if (solo == track)
     {
         g.setColour (col::soloOn);
@@ -399,15 +409,22 @@ void NameStrip::mouseDown (const juce::MouseEvent& e)
                             + " (" + noteName (proc.map.note (track)) + "), channel " + juce::String (proc.map.channel (track)));
         m.addItem (1, "Rename...");
         m.addItem (2, "Learn note from MIDI input");
+        m.addSeparator();
+        m.addItem (3, "Randomise this lane");
+        m.addItem (4, "Lock from the randomiser  (Alt-click)", true, proc.locked[track].load());
         m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
                          [safe = juce::Component::SafePointer<NameStrip> (this)] (int id)
                          {
                              if (safe == nullptr) return;
                              if (id == 1) safe->startRename();
                              if (id == 2) safe->proc.learnTrack = safe->track;
+                             if (id == 3) safe->proc.randomise (TrossSeqProcessor::RandomOp::Lane, safe->track);
+                             if (id == 4) safe->proc.toggleLock (safe->track);
+                             safe->repaint();
                          });
         return;
     }
+    if (e.mods.isAltDown()) { proc.toggleLock (track); repaint(); return; }
     if (e.getNumberOfClicks() > 1) { startRename(); return; }
     lastAccent = e.mods.isShiftDown();
     proc.panelHit (track, lastAccent);
@@ -625,7 +642,8 @@ void StatusLcd::paint (juce::Graphics& g)
 
     const int cur = proc.getCurrentSlot(), pending = proc.getPendingSlot();
     const juce::String txt = pending >= 0 ? "PAT " + juce::String (cur + 1) + " > " + juce::String (pending + 1)
-                                          : "PATTERN " + juce::String (cur + 1);
+                           : proc.isRandomPending() ? "PAT " + juce::String (cur + 1) + " > RND"
+                                                    : "PATTERN " + juce::String (cur + 1);
     g.setFont (mono (11.5f));
     g.setColour (col::lcdText.withAlpha (0.3f));
     g.drawText (txt, r.expanded (0.5f), juce::Justification::centred);
@@ -706,7 +724,7 @@ TrossSeqEditor::TrossSeqEditor (TrossSeqProcessor& p)
     content.addAndMakeVisible (grid);
     grid.setBounds (0, kSeqY, 918, kHeight - kSeqY);
     content.addAndMakeVisible (patternPad);
-    patternPad.setBounds (918, kSeqY, 100, kHeight - kSeqY);
+    patternPad.setBounds (918, kSeqY, 100, 206);
 
     for (int t = 0; t < kNumTracks; ++t)
     {
@@ -767,6 +785,33 @@ TrossSeqEditor::TrossSeqEditor (TrossSeqProcessor& p)
     exportKey.setBounds (1025, kSeqY + 170, 66, 26);
     exportKey.setTooltip ("Click: export patterns as MIDI files. Drag onto a MIDI track: drop the playing pattern as a clip.");
     content.addAndMakeVisible (exportKey);
+
+    // ---- randomiser
+    addKnob ("density", { 950, kRndY + 40 }, 34).setTooltip ("How busy random patterns are");
+    styleBox.addItemList ({ "STRAIGHT", "ELECTRO", "BROKEN" }, 1);
+    styleBox.setBounds (990, kRndY + 22, 114, 22);
+    styleBox.setTooltip ("Random style: Straight (four on the floor), Electro (syncopated kick, busy hats), Broken (scattered)");
+    content.addAndMakeVisible (styleBox);
+    styleAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, "rstyle", styleBox);
+    auto key = [this] (juce::TextButton& b, juce::Rectangle<int> r, const char* tip)
+    {
+        b.getProperties().set ("style", "key");
+        b.setBounds (r);
+        b.setTooltip (tip);
+        content.addAndMakeVisible (b);
+    };
+    key (randomBtn, { 926, kRndY + 72, 64, 24 }, "New random pattern (the accent row stays). Shift-click: small variation of this one");
+    randomBtn.getProperties().set ("led", true);
+    randomBtn.onClick = [this]
+    {
+        const bool shift = juce::ModifierKeys::getCurrentModifiers().isShiftDown();
+        proc.randomise (shift ? TrossSeqProcessor::RandomOp::Mutate : TrossSeqProcessor::RandomOp::NewPattern);
+        grid.repaint(); lcd.repaint();
+    };
+    key (fillBtn, { 996, kRndY + 72, 50, 24 }, "Random fill on the last four steps");
+    fillBtn.onClick = [this] { proc.randomise (TrossSeqProcessor::RandomOp::Fill); grid.repaint(); lcd.repaint(); };
+    key (undoBtn, { 1052, kRndY + 72, 52, 24 }, "Back to the pattern before the last RANDOM / FILL");
+    undoBtn.onClick = [this] { proc.undoRandom(); grid.repaint(); lcd.repaint(); };
 
     if (proc.isStandalone())   // no host transport: own play button + tempo
     {
@@ -968,6 +1013,16 @@ void TrossSeqEditor::paintPanel (juce::Graphics& g)
     g.setColour (col::darkLabel);
     g.setFont (font (8.5f, false, 0.15f));
     g.drawText ("LENGTH", 1018, kSeqY + 12, 80, 12, juce::Justification::centred);
+
+    // randomiser block
+    g.setColour (juce::Colours::black.withAlpha (0.45f));
+    g.fillRect (926, kRndY - 4, 178, 1);
+    g.setColour (juce::Colours::white.withAlpha (0.06f));
+    g.fillRect (926, kRndY - 3, 178, 1);
+    g.setColour (col::darkLabel);
+    g.setFont (font (8.5f, false, 0.15f));
+    g.drawText ("DENSITY", 920, kRndY + 6, 60, 12, juce::Justification::centred);
+    g.drawText ("RANDOM STYLE", 990, kRndY + 6, 114, 12, juce::Justification::centredLeft);
 }
 
 void TrossSeqEditor::timerCallback()
@@ -1011,6 +1066,15 @@ void TrossSeqEditor::timerCallback()
     for (int t = 0; t < kNumTracks; ++t)
         if (nv != lastNameVersion || solo != lastSolo || now - proc.lastSent[t].load() < 240) strips[(size_t) t]->repaint();
     lastNameVersion = nv; lastSolo = solo;
+
+    // randomiser: RANDOM blinks while a result waits for step 1; UNDO only when there's something to undo
+    const bool pendingRnd = proc.isRandomPending();
+    randomBtn.setToggleState (pendingRnd && (now / 200) % 2 == 0, juce::dontSendNotification);
+    undoBtn.setEnabled (proc.canUndo());
+    undoBtn.setAlpha (proc.canUndo() ? 1.0f : 0.55f);
+    if (pendingRnd != lastPendingRnd) { lcd.repaint(); lastPendingRnd = pendingRnd; }
+    const int lv = proc.lockVersion.load();
+    if (lv != lastLockVersion) { for (auto& strip : strips) strip->repaint(); lastLockVersion = lv; }
 
     // MIDI port status line + host tempo
     const auto portText = proc.getPortName() + (proc.directOut.isOpen() ? "1" : "0") + proc.getPortError()

@@ -36,6 +36,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout TrossSeqProcessor::createLay
     l.add (onOff ("thru", "MIDI Thru", true));
     l.add (onOff ("hostout", "Host Out", true));
     l.add (onOff ("clockout", "Clock Out", false));
+    l.add (pct ("density", "Random Density", 0.0f, 100.0f, 50.0f));
+    l.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "rstyle", 1 }, "Random Style",
+                                                         juce::StringArray { "Straight", "Electro", "Broken" }, 0));
     for (int t = 0; t < kNumTracks; ++t)
         l.add (onOff ("mute" + juce::String (t + 1), "Track " + juce::String (t + 1) + " Mute", false));
     return l;
@@ -50,6 +53,7 @@ TrossSeqProcessor::TrossSeqProcessor()
     raw.seqOn = p ("seqon"); raw.seqLen = p ("seqlen"); raw.pattern = p ("pattern"); raw.rec = p ("rec");
     raw.velocity = p ("velocity"); raw.accentVel = p ("accvel"); raw.gate = p ("gate"); raw.swing = p ("swing");
     raw.thru = p ("thru"); raw.hostOut = p ("hostout"); raw.clockOut = p ("clockout"); raw.offset = p ("offset");
+    raw.density = p ("density"); raw.rstyle = p ("rstyle");
 
     applyPreset (0);
 
@@ -126,6 +130,7 @@ juce::ValueTree TrossSeqProcessor::mapToTree() const
         tr.setProperty ("name", getTrackName (i), nullptr);
         tr.setProperty ("note", map.note (i), nullptr);
         tr.setProperty ("channel", map.channel (i), nullptr);
+        tr.setProperty ("locked", locked[i].load(), nullptr);
         t.appendChild (tr, nullptr);
     }
     return t;
@@ -134,12 +139,14 @@ juce::ValueTree TrossSeqProcessor::mapToTree() const
 void TrossSeqProcessor::mapFromTree (const juce::ValueTree& t)
 {
     if (! t.hasType ("MAP")) return;
+    ++lockVersion;
     for (int i = 0; i < kNumTracks && i < t.getNumChildren(); ++i)
     {
         auto tr = t.getChild (i);
         map.setNote (i, (int) tr.getProperty ("note", map.note (i)));
         map.setChannel (i, (int) tr.getProperty ("channel", map.channel (i)));
         setTrackName (i, tr.getProperty ("name", getTrackName (i)).toString());
+        locked[i] = (bool) tr.getProperty ("locked", false);
     }
 }
 
@@ -207,6 +214,76 @@ void TrossSeqProcessor::panelHit (int track, bool accent)
     hitWrite.store (next, std::memory_order_release);
 }
 
+// ---- randomiser
+void TrossSeqProcessor::randomise (RandomOp op, int track)
+{
+    const int slot = currentSlot.load();
+    const int len = juce::jlimit (1, kNumSteps, (int) raw.seqLen->load());
+    const auto style = (Style) juce::jlimit (0, kNumStyles - 1, (int) raw.rstyle->load());
+    const float density = raw.density->load();
+    const bool playing = playStep.load() >= 0;
+
+    // start from what will be playing: a result already waiting for step 1, or the slot itself
+    uint16_t rows[kNumRows];
+    const int waiting = staged.load();
+    const bool replaceWaiting = playing && waiting >= 0 && stagedBuf[waiting].slot == slot;
+    for (int r = 0; r < kNumRows; ++r) rows[r] = replaceWaiting ? stagedBuf[waiting].rows[r] : patterns.get (slot, r);
+
+    if (! replaceWaiting)   // remember the pattern as it was, for UNDO
+    {
+        UndoEntry e; e.slot = slot;
+        for (int r = 0; r < kNumRows; ++r) e.rows[r] = patterns.get (slot, r);
+        undoStack.push_back (e);
+        if (undoStack.size() > 32) undoStack.erase (undoStack.begin());
+    }
+
+    LaneInfo lanes[kNumTracks];
+    for (int t = 0; t < kNumTracks; ++t)
+        lanes[t] = { roleFor (getTrackName (t).toStdString(), map.note (t)), locked[t].load() };
+
+    switch (op)
+    {
+        case RandomOp::NewPattern: rnd.generate (rows, lanes, len, style, density); break;
+        case RandomOp::Mutate:     rnd.mutate (rows, lanes, len, style, density); break;
+        case RandomOp::Fill:       rnd.fill (rows, lanes, len, density); break;
+        case RandomOp::Lane:       if (track >= 0 && track < kNumTracks) rnd.generateLane (rows, lanes, track, len, style, density); break;
+    }
+
+    if (playing)
+    {
+        staged = -1;                       // the audio thread now ignores the old buffer
+        auto& b = stagedBuf[stagedWrite];
+        b.slot = slot;
+        std::copy (rows, rows + kNumRows, b.rows);
+        staged.store (stagedWrite, std::memory_order_release);
+        stagedWrite = 1 - stagedWrite;
+    }
+    else
+        for (int r = 1; r < kNumRows; ++r) patterns.set (slot, r, rows[r]);   // accent row stays as it is
+}
+
+bool TrossSeqProcessor::undoRandom()
+{
+    if (undoStack.empty()) return false;
+    if (staged.exchange (-1) >= 0)   // still waiting for step 1: just drop it
+    {
+        undoStack.pop_back();
+        return true;
+    }
+    const auto e = undoStack.back();
+    undoStack.pop_back();
+    for (int r = 1; r < kNumRows; ++r) patterns.set (e.slot, r, e.rows[r]);
+    return true;
+}
+
+void TrossSeqProcessor::applyStaged()
+{
+    const int i = staged.exchange (-1, std::memory_order_acq_rel);
+    if (i < 0) return;
+    const auto& b = stagedBuf[i];
+    for (int r = 1; r < kNumRows; ++r) patterns.set (b.slot, r, b.rows[r]);
+}
+
 // keeps a steady time base for the port output: follows the wall clock, but smooths out the
 // jitter of when the host happens to call processBlock
 void TrossSeqProcessor::updateBlockTime (int numSamples)
@@ -255,10 +332,14 @@ void TrossSeqProcessor::flushNoteOffs (int sample)
 // the sequencer reached `step`: a queued pattern takes over on step 1, then the step plays
 void TrossSeqProcessor::doStep (int step, int sample, bool seqOn, juce::int64 gateSamples)
 {
-    if (step == 0 && pendingSlot.load() >= 0)
+    if (step == 0)
     {
-        currentSlot = pendingSlot.load();
-        pendingSlot = -1;
+        if (pendingSlot.load() >= 0)
+        {
+            currentSlot = pendingSlot.load();
+            pendingSlot = -1;
+        }
+        applyStaged();   // a randomised pattern takes over on step 1
     }
     playStep = step;
     if (! seqOn) return;
@@ -345,6 +426,7 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     if (! playing)
     {
         if (pendingSlot.load() >= 0) { currentSlot = pendingSlot.load(); pendingSlot = -1; }
+        applyStaged();   // stopped before step 1 came round: write it now
         if (wasPlaying)
         {
             flushNoteOffs (0);

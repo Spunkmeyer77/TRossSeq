@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "SeqCore.h"
 #include "DirectMidiOut.h"
+#include "Randomizer.h"
 
 // TRoss Seq: the TRoss 606 step sequencer on its own, playing external drum machines over MIDI.
 // Output goes to the host's MIDI out (HOST OUT) and/or straight to a MIDI port (MIDI OUT selector).
@@ -55,6 +56,17 @@ public:
 
     // ---- Shift + mouse held on a track's M button: only that track plays until the button is released
     std::atomic<int> momentarySolo { -1 };
+
+    // ---- randomiser (message thread). While the song plays, the result waits for step 1;
+    // while stopped it's written at once. The accent row is never touched.
+    enum class RandomOp { NewPattern, Mutate, Fill, Lane };
+    void randomise (RandomOp op, int track = -1);
+    bool undoRandom();                 // back to the pattern before the last randomise; false = nothing to undo
+    bool canUndo() const { return ! undoStack.empty(); }
+    bool isRandomPending() const { return staged.load() >= 0; }
+    std::atomic<bool> locked[trossseq::kNumTracks] {};   // Alt-click a lane name: the randomiser leaves it alone
+    std::atomic<int> lockVersion { 0 };
+    void toggleLock (int t) { locked[t] = ! locked[t].load(); ++lockVersion; }
 
     // ---- MIDI learn: the next note that comes in sets this track's note and channel
     std::atomic<int> learnTrack { -1 };
@@ -119,6 +131,16 @@ private:
     double blockStartMs = 0.0;
     bool   haveBlockTime = false;
 
+    // randomiser: a finished pattern waiting for step 1 (double buffered: UI writes one half, audio reads the other)
+    struct Staged { int slot = 0; uint16_t rows[trossseq::kNumRows] {}; };
+    Staged stagedBuf[2];
+    int stagedWrite = 0;                    // message thread
+    std::atomic<int> staged { -1 };         // index of the buffer waiting, -1 = none
+    void applyStaged();                     // audio thread
+    struct UndoEntry { int slot = 0; uint16_t rows[trossseq::kNumRows] {}; };
+    std::vector<UndoEntry> undoStack;       // message thread
+    trossseq::Randomizer rnd;
+
     // per-block output
     juce::MidiBuffer out;
     bool hostOutOn = true;
@@ -128,7 +150,7 @@ private:
     {
         std::atomic<float>* mute[trossseq::kNumTracks];
         std::atomic<float> *seqOn, *seqLen, *pattern, *rec, *velocity, *accentVel, *gate, *swing,
-                           *thru, *hostOut, *clockOut, *offset;
+                           *thru, *hostOut, *clockOut, *offset, *density, *rstyle;
     } raw {};
 
     void emit (const juce::MidiMessage& m, int sample);

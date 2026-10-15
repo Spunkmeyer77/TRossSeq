@@ -29,19 +29,14 @@ WizardStyle=modern
 UninstallDisplayName=TRoss Seq
 
 [Types]
-Name: "full";   Description: "VST3 plug-in and standalone app"
+Name: "full";   Description: "VST3 plug-in"
 Name: "custom"; Description: "Choose components"; Flags: iscustom
 
 [Components]
 Name: "vst3"; Description: "VST3 plug-in (Ableton Live, Bitwig, Reaper, Cubase...)"; Types: full custom
-Name: "app";  Description: "Standalone app";                                         Types: full custom
 
 [Files]
 Source: "{#Artefacts}\VST3\TRoss Seq.vst3\*"; DestDir: "{commoncf64}\VST3\TRoss Seq.vst3"; Components: vst3; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "{#Artefacts}\Standalone\TRoss Seq.exe"; DestDir: "{app}"; Components: app; Flags: ignoreversion
-
-[Icons]
-Name: "{autoprograms}\TRoss Seq"; Filename: "{app}\TRoss Seq.exe"; Components: app
 
 [Messages]
 FinishedLabel=TRoss Seq is installed.%n%nRescan plug-ins in your DAW (Ableton Live: Settings > Plug-Ins > Rescan).

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(TRossSeq VERSION 0.2.0)
+project(TRossSeq VERSION 0.3.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -19,11 +19,11 @@ else()
 endif()
 
 if(APPLE)
-    set(TSEQ_FORMATS AU VST3 Standalone)
+    set(TSEQ_FORMATS AU VST3)
 elseif(WIN32)
-    set(TSEQ_FORMATS VST3 Standalone)
+    set(TSEQ_FORMATS VST3)
 else()
-    set(TSEQ_FORMATS VST3 LV2 Standalone)
+    set(TSEQ_FORMATS VST3 LV2)
 endif()
 
 # Copy the built plug-ins into the user's plug-in folders (turned off on the build servers)

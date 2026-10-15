@@ -113,6 +113,9 @@ jobs:
           chmod +x tools/package_linux.sh
           ./tools/package_linux.sh
 
+      - name: Add the manual
+        run: cp "docs/TRoss Seq Manual.pdf" dist/
+
       - uses: actions/upload-artifact@v4
         with:
           name: TRossSeq-${{ env.VERSION }}-${{ matrix.name }}

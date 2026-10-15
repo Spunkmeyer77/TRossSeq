@@ -1,6 +1,6 @@
 # TRoss Seq
 
-16-step MIDI drum sequencer for playing hardware drum machines (AU / VST3 / LV2 / Standalone) by Ticco Ross, 2026.
+16-step MIDI drum sequencer for playing hardware drum machines (AU / VST3 / LV2) by Ticco Ross, 2026.
 
 Thirteen drum tracks plus an accent row, 12 pattern slots, and each track sends its own MIDI note on its own channel,
 so one TRoss Seq can play one drum box, or several drum boxes at once.
@@ -11,7 +11,7 @@ There are two outputs, and you can use either or both:
 
 | Output | How it works | Use it when |
 |---|---|---|
-| **MIDI OUT PORT** | TRoss Seq sends straight to the MIDI port you pick (a USB/DIN MIDI interface, or a drum box with USB MIDI) | Works in every host and in the standalone app. The easy route in Ableton Live and Logic |
+| **MIDI OUT PORT** | TRoss Seq sends straight to the MIDI port you pick (a USB/DIN MIDI interface, or a drum box with USB MIDI) | Works in every host. The easy route in Ableton Live and Logic |
 | **HOST OUT** | The notes go to the host's MIDI out, and you route them to the drum machine there | Hosts that pass MIDI out of plug-ins (Bitwig, Reaper, Cubase, Studio One...) |
 
 If both send to the same drum machine, you'll hear every note twice. Turn **HOST OUT** off, or set
@@ -48,6 +48,12 @@ port, so drum boxes with their own sequencers or tempo-synced effects follow alo
 | CLEAR | Clears the playing pattern |
 | REC | While playing, incoming notes that match a track are written into the nearest step. Velocity above 100 also sets the accent |
 | PATTERN 1–12 | While playing, a new slot waits until the current pattern reaches step 1. Right-click a slot to copy it to another slot or clear it |
+| RANDOM | Writes a new pattern into the playing slot, lane by lane, the way each drum is usually played (kick on the beat, snare on the backbeat, busy hats, sparse toms and percussion). The ACCENT row is never changed. **Shift-click** for a small variation of the current pattern instead. While the song plays, the new pattern starts on step 1 (the RANDOM light blinks until then) |
+| FILL | Randomises only the last four steps of the pattern, as a fill |
+| UNDO | Goes back to the pattern before the last RANDOM / FILL (up to 32 steps back). While a result is still waiting for step 1, UNDO cancels it |
+| DENSITY | How busy random patterns are |
+| RANDOM STYLE | **Straight** (four on the floor), **Electro** (syncopated kick, sparse snare, busy 16th hats), **Broken** (scattered) |
+| Lane locks | **Alt-click** (Option-click on a Mac) a track name to lock it: a padlock shows and the randomiser leaves that lane alone. Right-click a name → **Randomise this lane** to roll just that one |
 | EXPORT MIDI | Click to export the playing pattern, all patterns in a row, or all as separate `.mid` files (with each track's note and channel, swing and gate). Drag the key onto a MIDI track to drop the playing pattern in as a clip |
 
 Incoming notes are matched to tracks by note and channel first, then by note alone, so a keyboard on
@@ -60,8 +66,11 @@ Everything (patterns, track names, notes, channels, the MIDI port) is saved with
 isn't connected when the project opens, the display says so, and TRoss Seq reconnects to a port with the same name
 when you pick it again.
 
-The **standalone app** has its own **PLAY** button and BPM read-out. Its Options → Audio/MIDI Settings
-window has a MIDI output too, which is the HOST OUT route.
+
+The randomiser recognises each lane by its name (BD, KICK, SNARE, CH, OPEN HAT, TOM, RIM, COWBELL...) and,
+if the name doesn't say, by its General MIDI note. Rename a lane and it's treated as that drum.
+
+The full manual is in `docs/TRoss Seq Manual.pdf`.
 
 ## Build on your Mac (macOS 12+)
 
@@ -89,9 +98,9 @@ The files appear under the run's **Artifacts** on the **Actions** tab:
 
 | Platform | Files |
 |---|---|
-| macOS | `TRossSeq-<v>-macOS.pkg` (AU + VST3 + app), plus AU and VST3 zips |
-| Windows | `TRossSeq-<v>-Windows-Setup.exe` (VST3 + app), plus a VST3 zip |
-| Linux | `TRossSeq-<v>-Linux-x86_64.tar.gz` (VST3 + LV2 + app, with `install.sh`) |
+| macOS | `TRossSeq-<v>-macOS.pkg` (AU + VST3), plus AU and VST3 zips and the manual |
+| Windows | `TRossSeq-<v>-Windows-Setup.exe` (VST3), plus a VST3 zip and the manual |
+| Linux | `TRossSeq-<v>-Linux-x86_64.tar.gz` (VST3 + LV2, with `install.sh`), and the manual |
 
 **Publishing a release:** raise the version in `CMakeLists.txt`, commit, then `git tag v0.2.0 && git push --tags`.
 
@@ -103,5 +112,5 @@ cmake -B build -DTSEQ_BUILD_TESTS=ON && cmake --build build --target TRossSeqTes
 ```
 
 Covers note timing against the host transport, velocity and accent, gate, swing, pattern queueing, LENGTH,
-recording, MIDI learn, mute, Shift-held solo, all 13 lanes, thru / host out, loops, stop flushing, presets, MIDI export, state save/restore,
+recording, MIDI learn, mute, Shift-held solo, all 13 lanes, the randomiser (styles, density, locks, mutate, fill, undo), thru / host out, loops, stop flushing, presets, MIDI export, state save/restore,
 and an editor snapshot.
