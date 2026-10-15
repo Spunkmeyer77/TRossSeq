@@ -301,7 +301,15 @@ void StepGrid::paint (juce::Graphics& g)
             g.fillRoundedRectangle (r, 3.0f);
 
             const auto c = r.getCentre();
-            if (on)
+            if (on && proc.patterns.flam (slot, row, s))   // flam: a small grace LED, then the main one
+            {
+                const auto cg = c.translated (-4.5f, 0.0f), cm = c.translated (2.5f, 0.0f);
+                g.setColour (juce::Colour (0xff1a1a1a));
+                g.fillRoundedRectangle (juce::Rectangle<float> (cg.x - 4.0f, c.y - 5.5f, (cm.x + 5.5f) - (cg.x - 4.0f), 11.0f), 5.5f);
+                drawLed (g, cg, 5.0f, true, juce::Colour (0xffffb36a));
+                drawLed (g, cm, 8.0f, true);
+            }
+            else if (on)
             {
                 g.setColour (juce::Colour (0xff1a1a1a));
                 g.fillEllipse (juce::Rectangle<float> (11.0f, 11.0f).withCentre (c));
@@ -340,6 +348,19 @@ void StepGrid::mouseDown (const juce::MouseEvent& e)
     int row, step;
     if (! hit (e.position, row, step)) return;
     const int slot = proc.getCurrentSlot();
+    if (e.mods.isShiftDown() && row > 0)   // Shift-click: flam on (switching the step on if needed) / flam off
+    {
+        if (! proc.patterns.cell (slot, row, step))
+        {
+            proc.patterns.setCell (slot, row, step, true);
+            proc.patterns.setFlam (slot, row, step, true);
+        }
+        else
+            proc.patterns.setFlam (slot, row, step, ! proc.patterns.flam (slot, row, step));
+        dragRow = -1;
+        repaint();
+        return;
+    }
     dragValue = ! proc.patterns.cell (slot, row, step);
     dragRow = row; lastDragStep = step;
     proc.patterns.setCell (slot, row, step, dragValue);
@@ -469,6 +490,7 @@ static MidiExport::Settings exportSettings (TrossSeqProcessor& proc)
     s.accentVelocity = (int) v ("accvel");
     s.gate = v ("gate") / 100.0f;
     s.swing = v ("swing");
+    s.flamMs = v ("flamtime");
     return s;
 }
 
@@ -692,13 +714,14 @@ TrossSeqEditor::TrossSeqEditor (TrossSeqProcessor& p)
     content.setBounds (0, 0, kWidth, kHeight);
 
     // ---- silver top: feel, MIDI out, drum map
-    addKnob ("velocity", { 50, 94 }, 34);
-    addKnob ("accvel",   { 112, 94 }, 34);
-    addKnob ("gate",     { 174, 94 }, 34);
-    addKnob ("swing",    { 236, 94 }, 34);
+    addKnob ("velocity", { 46, 94 }, 34);
+    addKnob ("accvel",   { 102, 94 }, 34);
+    addKnob ("gate",     { 158, 94 }, 34);
+    addKnob ("swing",    { 214, 94 }, 34);
+    addKnob ("flamtime", { 270, 94 }, 34).setTooltip ("Flam: how far before the step the grace note plays. Shift-click a pad to add or remove a flam");
 
     content.addAndMakeVisible (portBox);
-    portBox.setBounds (300, 76, 250, 22);
+    portBox.setBounds (326, 76, 226, 22);
     auto toggle = [this] (const char* id, const char* text, int y, const char* tip)
     {
         auto& b = addButton (id, text, { 566, y, 84, 15 }, "rubber");
@@ -716,6 +739,26 @@ TrossSeqEditor::TrossSeqEditor (TrossSeqProcessor& p)
     mapBtn.onClick = [this] { showMapMenu(); };
     mapBtn.setTooltip ("Note maps for common drum machines, all tracks on one channel, save as default");
     content.addAndMakeVisible (mapBtn);
+
+    // HELP: the hover tips on/off (remembered for every TRoss Seq)
+    helpBtn.getProperties().set ("style", "rubber");
+    helpBtn.getProperties().set ("led", true);
+    helpBtn.getProperties().set ("onColour", (juce::int64) juce::Colour (0xffdfe8d8).getARGB());
+    helpBtn.setClickingTogglesState (true);
+    helpBtn.setBounds (kWidth - kMargin - 112, 29, 58, 15);
+    {
+        juce::PropertiesFile settings (TrossSeqProcessor::settingsOptions());
+        helpBtn.setToggleState (settings.getBoolValue ("showHelp", true), juce::dontSendNotification);
+    }
+    helpBtn.onClick = [this]
+    {
+        juce::PropertiesFile settings (TrossSeqProcessor::settingsOptions());
+        settings.setValue ("showHelp", helpBtn.getToggleState());
+        settings.saveIfNeeded();
+        updateHelp();
+    };
+    content.addAndMakeVisible (helpBtn);
+    updateHelp();
 
     content.addAndMakeVisible (lcd);
     lcd.setBounds (kMasterX + 7, 74, kMasterW - 14, 22);
@@ -916,6 +959,20 @@ void TrossSeqEditor::showMapMenu()
 
 void TrossSeqEditor::paint (juce::Graphics& g) { g.fillAll (col::darkBottom); }
 
+void TrossSeqEditor::updateHelp()
+{
+    if (helpBtn.getToggleState())
+    {
+        if (tooltips == nullptr) tooltips = std::make_unique<juce::TooltipWindow> (this, 600);
+        helpBtn.setTooltip ("Hover tips on. Click to switch them off");
+    }
+    else
+    {
+        tooltips.reset();   // no tooltip window, no tips (knob value read-outs still show)
+        helpBtn.setTooltip ({});
+    }
+}
+
 void TrossSeqEditor::resized()
 {
     content.setTransform (juce::AffineTransform::scale ((float) getWidth() / kWidth));
@@ -967,23 +1024,24 @@ void TrossSeqEditor::paintPanel (juce::Graphics& g)
         g.fillRect (x + 1, 60, 1, 56);
     };
 
-    label ("VELOCITY", 20, 61, 60);
-    label ("ACCENT", 82, 61, 60);
-    label ("GATE", 144, 61, 60);
-    label ("SWING", 206, 61, 60);
-    divider (278);
+    label ("VELOCITY", 16, 61, 60);
+    label ("ACCENT", 72, 61, 60);
+    label ("GATE", 128, 61, 60);
+    label ("SWING", 184, 61, 60);
+    label ("FLAM", 240, 61, 60);
+    divider (308);
 
-    label ("MIDI OUT PORT", 300, 61, 250, juce::Justification::centredLeft);
+    label ("MIDI OUT PORT", 326, 61, 226, juce::Justification::centredLeft);
     {
         juce::String status;
         auto c = col::softText;
         if (proc.directOut.isOpen())                 { status = "CONNECTED"; c = col::okGreen; }
         else if (proc.getPortError().isNotEmpty())   { status = proc.getPortError().toUpperCase(); c = col::orange; }
-        else if (proc.getPortName().isNotEmpty())    { status = "NOT CONNECTED - PLUG IT IN OR PICK ANOTHER PORT"; c = col::orange; }
+        else if (proc.getPortName().isNotEmpty())    { status = "NOT CONNECTED: PLUG IN OR PICK ANOTHER"; c = col::orange; }
         else                                         status = "NONE: ONLY THE HOST'S MIDI OUT";
         g.setColour (c);
         g.setFont (font (8.0f, true, 0.08f));
-        g.drawText (status, 300, 103, 260, 12, juce::Justification::centredLeft);
+        g.drawText (status, 326, 103, 232, 12, juce::Justification::centredLeft);
     }
     label ("PORT DELAY", 660, 61, 60);
     divider (726);

@@ -16,7 +16,25 @@ class PatternMemory
 {
 public:
     uint16_t get (int slot, int row) const          { return masks[slot][row].load (std::memory_order_relaxed); }
-    void set (int slot, int row, uint16_t m)       { masks[slot][row].store (m, std::memory_order_relaxed); ++version; }
+    // writing a row also drops flams on steps that are now off
+    void set (int slot, int row, uint16_t m)
+    {
+        masks[slot][row].store (m, std::memory_order_relaxed);
+        flams[slot][row].store ((uint16_t) (flams[slot][row].load (std::memory_order_relaxed) & m), std::memory_order_relaxed);
+        ++version;
+    }
+
+    // ---- flams: a grace note just before the step (drum rows only; a flam needs its step on)
+    uint16_t getFlams (int slot, int row) const     { return flams[slot][row].load (std::memory_order_relaxed); }
+    void setFlams (int slot, int row, uint16_t m)  { flams[slot][row].store ((uint16_t) (m & get (slot, row)), std::memory_order_relaxed); ++version; }
+    bool flam (int slot, int row, int step) const  { return (getFlams (slot, row) >> step) & 1; }
+    void setFlam (int slot, int row, int step, bool on)
+    {
+        if (row == 0) return;   // no flams on the accent row
+        auto m = getFlams (slot, row);
+        m = on ? (uint16_t) (m | (1u << step)) : (uint16_t) (m & ~(1u << step));
+        setFlams (slot, row, m);
+    }
     bool cell (int slot, int row, int step) const  { return (get (slot, row) >> step) & 1; }
     void setCell (int slot, int row, int step, bool on)
     {
@@ -25,7 +43,7 @@ public:
         set (slot, row, m);
     }
     void clear (int slot) { for (int r = 0; r < kNumRows; ++r) set (slot, r, 0); }
-    void copySlot (int from, int to) { for (int r = 0; r < kNumRows; ++r) set (to, r, get (from, r)); }
+    void copySlot (int from, int to) { for (int r = 0; r < kNumRows; ++r) { set (to, r, get (from, r)); setFlams (to, r, getFlams (from, r)); } }
     bool isEmpty (int slot) const
     {
         for (int r = 1; r < kNumRows; ++r)   // the accent row alone plays nothing
@@ -36,6 +54,7 @@ public:
 
 private:
     std::atomic<uint16_t> masks[kNumSlots][kNumRows] {};
+    std::atomic<uint16_t> flams[kNumSlots][kNumRows] {};
     std::atomic<int> version { 0 };
 };
 

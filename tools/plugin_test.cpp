@@ -293,6 +293,65 @@ int main (int argc, char** argv)
         check (std::abs (tempo - 128.0) < 0.01 && std::abs (lastTick - 16 * 24) < 0.5, "export: 128 BPM, 16 steps long");
     }
 
+    // 14a. flams: grace note FLAM ms before the step at 60 % velocity, main hit on the grid
+    {
+        host.playing = false;
+        run (2);
+        setP ("pattern", 3.0f);   // an empty slot
+        run (2);
+        const int fs = proc.getCurrentSlot();
+        pats.clear (fs);
+        proc.map.setNote (1, 38);
+        pats.setCell (fs, 2, 4, true);       // SD on step 5 ...
+        pats.setFlam (fs, 2, 4, true);       // ... with a flam
+        pats.setCell (fs, 2, 12, true);      // SD on step 13, no flam
+        setP ("flamtime", 25.0f);
+        setP ("swing", 50.0f);
+        host.playing = true; host.ppq = 0.0; evs.clear();
+        const auto tf = now;
+        run (200);
+        auto sd = ons (38);
+        const juce::int64 flamS = (juce::int64) std::round (0.025 * sr);   // 1200 samples
+        check (sd.size() == 3, "flammed step sends 2 notes, plain step 1 (got " + juce::String ((int) sd.size()) + ")");
+        if (sd.size() == 3)
+        {
+            check (std::abs ((sd[0].t - tf) - (24000 - flamS)) <= 1 && sd[1].t - tf == 24000,
+                   "grace note 25 ms before step 5, main hit exactly on step 5 (grace at " + juce::String ((int) (sd[0].t - tf)) + ")");
+            check (sd[0].m.getVelocity() == 60 && sd[1].m.getVelocity() == 100, "grace at 60 % velocity (60), main at 100");
+            check (sd[2].t - tf == 72000, "step 13 without flam: one hit on the grid");
+        }
+        int open = 0, maxOpen = 0;
+        for (auto& e : evs) if (e.m.getNoteNumber() == 38) { if (e.m.isNoteOn()) ++open; if (e.m.isNoteOff()) --open; maxOpen = juce::jmax (maxOpen, open); }
+        check (maxOpen == 1, "grace note ends before the main hit starts");
+
+        // a flam on step 1 still plays after the loop wraps
+        pats.setCell (fs, 2, 0, true); pats.setFlam (fs, 2, 0, true);
+        host.ppq = 0.0; evs.clear();
+        run (420);   // a bit over 2 bars
+        int onStep1 = 0;
+        for (auto& e : ons (38)) if (e.m.getVelocity() == 60) ++onStep1;
+        check (onStep1 >= 3, "flams play every bar, including step 1 after the wrap (" + juce::String (onStep1) + " grace notes)");
+
+        // switching a step off drops its flam; state keeps flams
+        pats.setCell (fs, 2, 0, false);
+        check (! pats.flam (fs, 2, 0), "switching a step off removes its flam");
+        juce::MemoryBlock st; proc.getStateInformation (st);
+        TrossSeqProcessor other;
+        other.setStateInformation (st.getData(), (int) st.getSize());
+        check (other.patterns.flam (fs, 2, 4) && ! other.patterns.flam (fs, 2, 12), "flams saved and restored with the project");
+
+        // MIDI export writes the grace note before the step
+        MidiExport::Settings xs; xs.bpm = 120.0; xs.flamMs = 25.0f;
+        auto mf = MidiExport::make (pats, proc.map, { fs }, xs, "flam");
+        std::vector<double> sdTimes;
+        for (auto* e : *mf.getTrack (0)) if (e->message.isNoteOn() && e->message.getNoteNumber() == 38) sdTimes.push_back (e->message.getTimeStamp());
+        check (sdTimes.size() == 3 && sdTimes[0] < 96 && sdTimes[1] == 96, "export: grace note just before step 5 (tick " + juce::String (sdTimes.empty() ? -1.0 : sdTimes[0]) + "), main on 96");
+        host.playing = false;
+        run (2);
+        setP ("pattern", 0.0f);
+        run (2);
+    }
+
     // 14b. randomiser
     {
         // lane roles from names, then notes
@@ -443,6 +502,59 @@ int main (int argc, char** argv)
     { juce::Random r (7); for (int i = 0; i < 3; ++i) proc.randomise (TrossSeqProcessor::RandomOp::NewPattern); }
     juce::Thread::sleep (400);   // let the name-strip flashes fade
     std::unique_ptr<juce::AudioProcessorEditor> ed (proc.createEditor());
+
+    // Shift-click on a pad: flam on / off; and the HELP switch
+    {
+        StepGrid* grid = nullptr;
+        juce::TextButton* help = nullptr;
+        std::function<void (juce::Component&)> find = [&] (juce::Component& c)
+        {
+            for (auto* ch : c.getChildren())
+            {
+                if (auto* gr = dynamic_cast<StepGrid*> (ch)) grid = gr;
+                if (auto* tb = dynamic_cast<juce::TextButton*> (ch)) if (tb->getButtonText() == "HELP") help = tb;
+                find (*ch);
+            }
+        };
+        find (*ed);
+        check (grid != nullptr && help != nullptr, "step grid and HELP button found");
+        if (grid != nullptr)
+        {
+            const int sl = proc.getCurrentSlot();
+            pats.setCell (sl, 3, 7, false);
+            auto src = juce::Desktop::getInstance().getMainMouseSource();
+            const auto pos = StepGrid::padRect (3, 7).getCentre();
+            auto click = [&] (juce::ModifierKeys mods)
+            {
+                juce::MouseEvent e (src, pos, mods, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, grid, grid, juce::Time::getCurrentTime(), pos, juce::Time::getCurrentTime(), 1, false);
+                grid->mouseDown (e); grid->mouseUp (e);
+            };
+            const auto shift = juce::ModifierKeys (juce::ModifierKeys::shiftModifier | juce::ModifierKeys::leftButtonModifier);
+            click (shift);
+            check (pats.cell (sl, 3, 7) && pats.flam (sl, 3, 7), "Shift-click on an empty pad: step on with a flam");
+            click (shift);
+            check (pats.cell (sl, 3, 7) && ! pats.flam (sl, 3, 7), "Shift-click again: flam gone, step stays");
+            click (shift);
+            click (juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier));
+            check (! pats.cell (sl, 3, 7) && ! pats.flam (sl, 3, 7), "plain click switches the step (and its flam) off");
+            pats.setCell (sl, 3, 7, true); pats.setFlam (sl, 3, 7, true);   // leave one showing for the snapshot
+            pats.setCell (sl, 2, 14, true); pats.setFlam (sl, 2, 14, true);
+        }
+        if (help != nullptr)
+        {
+            auto countTips = [&] { int n = 0; for (auto* ch : ed->getChildren()) if (dynamic_cast<juce::TooltipWindow*> (ch)) ++n; return n; };
+            const bool wasOn = help->getToggleState();
+            if (! wasOn) { help->setToggleState (true, juce::dontSendNotification); help->onClick(); }
+            const int on = countTips();
+            help->setToggleState (false, juce::sendNotificationSync);
+            help->onClick();
+            const int off = countTips();
+            help->setToggleState (true, juce::sendNotificationSync);
+            help->onClick();
+            check (on == 1 && off == 0 && countTips() == 1, "HELP off removes the hover tips, on brings them back");
+            if (! wasOn) { help->setToggleState (false, juce::dontSendNotification); help->onClick(); }
+        }
+    }
 
     // the M button with the mouse: Shift-press = momentary solo, nothing toggled; plain click = mute toggle
     {

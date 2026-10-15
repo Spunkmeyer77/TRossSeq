@@ -17,6 +17,7 @@ struct MidiExport
         int velocity = 100, accentVelocity = 127;
         float gate = 0.5f;     // fraction of a step
         float swing = 50.0f;   // %
+        float flamMs = 25.0f;  // grace note this long before a flammed step
     };
 
     // One track: the given slots one after another, each `length` steps long.
@@ -30,6 +31,7 @@ struct MidiExport
         meta (juce::MidiMessage::timeSignatureMetaEvent (4, 4));
 
         const double sw = StepClock::swingFromPercent (s.swing);
+        const int flamTicks = juce::jlimit (1, kTicksPerStep / 2, juce::roundToInt (s.flamMs / 1000.0 * s.bpm / 60.0 * kTicksPerQuarter));
         const int gateTicks = juce::jlimit (1, kTicksPerStep - 1, juce::roundToInt (s.gate * kTicksPerStep));
         int start = 0;
         for (int slot : slots)
@@ -41,8 +43,14 @@ struct MidiExport
                 for (int tr = 0; tr < kNumTracks; ++tr)
                     if (p.cell (slot, tr + 1, st))
                     {
-                        const auto vel = (juce::uint8) juce::jlimit (1, 127, accent ? s.accentVelocity : s.velocity);
-                        seq.addEvent (juce::MidiMessage::noteOn (map.channel (tr), map.note (tr), vel), t);
+                        const int vel = juce::jlimit (1, 127, accent ? s.accentVelocity : s.velocity);
+                        if (p.flam (slot, tr + 1, st))   // grace note just before, softer
+                        {
+                            const int g = juce::jmax (0, t - flamTicks);
+                            seq.addEvent (juce::MidiMessage::noteOn (map.channel (tr), map.note (tr), (juce::uint8) juce::jmax (1, juce::roundToInt (vel * 0.6f))), g);
+                            seq.addEvent (juce::MidiMessage::noteOff (map.channel (tr), map.note (tr)), g + juce::jmax (1, flamTicks * 3 / 4));
+                        }
+                        seq.addEvent (juce::MidiMessage::noteOn (map.channel (tr), map.note (tr), (juce::uint8) vel), t);
                         seq.addEvent (juce::MidiMessage::noteOff (map.channel (tr), map.note (tr)), t + gateTicks);
                     }
             }

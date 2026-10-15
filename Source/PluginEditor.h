@@ -201,7 +201,9 @@ private:
     // standalone app only
     juce::TextButton playBtn { "PLAY" };
     juce::Slider bpmBox;
-    juce::TooltipWindow tooltips { this, 600 };
+    juce::TextButton helpBtn { "HELP" };
+    std::unique_ptr<juce::TooltipWindow> tooltips;
+    void updateHelp();
 
     int lastVersion = -1, lastStep = -2, lastSlot = -1, lastPending = -2, lastLen = -1, lastSel = -1,
         lastMapVersion = -1, lastNameVersion = -1, lastLearn = -2, lastSolo = -2;

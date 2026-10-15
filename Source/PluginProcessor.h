@@ -123,6 +123,7 @@ private:
 
     // transport following
     trossseq::StepClock clock;
+    trossseq::StepClock graceClock;   // runs a flam's length ahead of `clock`, to play grace notes before their step
     bool wasPlaying = false;
     juce::int64 lastClockTick = 0;
     double internalPpq = 0.0;
@@ -137,7 +138,7 @@ private:
     int stagedWrite = 0;                    // message thread
     std::atomic<int> staged { -1 };         // index of the buffer waiting, -1 = none
     void applyStaged();                     // audio thread
-    struct UndoEntry { int slot = 0; uint16_t rows[trossseq::kNumRows] {}; };
+    struct UndoEntry { int slot = 0; uint16_t rows[trossseq::kNumRows] {}, flams[trossseq::kNumRows] {}; };
     std::vector<UndoEntry> undoStack;       // message thread
     trossseq::Randomizer rnd;
 
@@ -150,17 +151,21 @@ private:
     {
         std::atomic<float>* mute[trossseq::kNumTracks];
         std::atomic<float> *seqOn, *seqLen, *pattern, *rec, *velocity, *accentVel, *gate, *swing,
-                           *thru, *hostOut, *clockOut, *offset, *density, *rstyle;
+                           *thru, *hostOut, *clockOut, *offset, *density, *rstyle, *flamTime;
     } raw {};
 
     void emit (const juce::MidiMessage& m, int sample);
     void noteOn (int track, int velocity, int sample, juce::int64 gateSamples);
     void flushNoteOffs (int sample);
     void doStep (int step, int sample, bool seqOn, juce::int64 gateSamples);
+    void doGrace (int step, int sample, juce::int64 flamSamples);
+    bool audible (int track) const;
     void recordHit (int track, bool accent, double sixteenthPos, int len);
     void updateBlockTime (int numSamples);
 
-    static juce::PropertiesFile::Options settingsOptions();
+public:
+    static juce::PropertiesFile::Options settingsOptions();   // also holds editor settings (help on/off)
+private:
     juce::ValueTree mapToTree() const;
     void mapFromTree (const juce::ValueTree&);
 

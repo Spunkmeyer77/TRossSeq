@@ -36,6 +36,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout TrossSeqProcessor::createLay
     l.add (onOff ("thru", "MIDI Thru", true));
     l.add (onOff ("hostout", "Host Out", true));
     l.add (onOff ("clockout", "Clock Out", false));
+    l.add (std::make_unique<APF> (juce::ParameterID { "flamtime", 1 }, "Flam Time", juce::NormalisableRange<float> (5.0f, 80.0f, 0.5f), 25.0f,
+                                  juce::AudioParameterFloatAttributes().withStringFromValueFunction (
+                                      [] (float v, int) { return juce::String (v, 1) + " ms"; })));
     l.add (pct ("density", "Random Density", 0.0f, 100.0f, 50.0f));
     l.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "rstyle", 1 }, "Random Style",
                                                          juce::StringArray { "Straight", "Electro", "Broken" }, 0));
@@ -53,7 +56,7 @@ TrossSeqProcessor::TrossSeqProcessor()
     raw.seqOn = p ("seqon"); raw.seqLen = p ("seqlen"); raw.pattern = p ("pattern"); raw.rec = p ("rec");
     raw.velocity = p ("velocity"); raw.accentVel = p ("accvel"); raw.gate = p ("gate"); raw.swing = p ("swing");
     raw.thru = p ("thru"); raw.hostOut = p ("hostout"); raw.clockOut = p ("clockout"); raw.offset = p ("offset");
-    raw.density = p ("density"); raw.rstyle = p ("rstyle");
+    raw.density = p ("density"); raw.rstyle = p ("rstyle"); raw.flamTime = p ("flamtime");
 
     applyPreset (0);
 
@@ -101,6 +104,7 @@ void TrossSeqProcessor::prepareToPlay (double sr, int samplesPerBlock)
     sampleRate = sr;
     wasPlaying = false;
     clock.stop();
+    graceClock.stop();
     playStep = -1;
     numPending = 0;
     haveBlockTime = false;
@@ -232,7 +236,7 @@ void TrossSeqProcessor::randomise (RandomOp op, int track)
     if (! replaceWaiting)   // remember the pattern as it was, for UNDO
     {
         UndoEntry e; e.slot = slot;
-        for (int r = 0; r < kNumRows; ++r) e.rows[r] = patterns.get (slot, r);
+        for (int r = 0; r < kNumRows; ++r) { e.rows[r] = patterns.get (slot, r); e.flams[r] = patterns.getFlams (slot, r); }
         undoStack.push_back (e);
         if (undoStack.size() > 32) undoStack.erase (undoStack.begin());
     }
@@ -272,7 +276,7 @@ bool TrossSeqProcessor::undoRandom()
     }
     const auto e = undoStack.back();
     undoStack.pop_back();
-    for (int r = 1; r < kNumRows; ++r) patterns.set (e.slot, r, e.rows[r]);
+    for (int r = 1; r < kNumRows; ++r) { patterns.set (e.slot, r, e.rows[r]); patterns.setFlams (e.slot, r, e.flams[r]); }
     return true;
 }
 
@@ -346,13 +350,37 @@ void TrossSeqProcessor::doStep (int step, int sample, bool seqOn, juce::int64 ga
     const int slot = currentSlot.load();
     const bool accent = patterns.cell (slot, 0, step);
     const int vel = (int) (accent ? raw.accentVel->load() : raw.velocity->load());
-    const int solo = momentarySolo.load();
     for (int t = 0; t < kNumTracks; ++t)
-    {
-        const bool audible = solo >= 0 ? t == solo : raw.mute[t]->load() < 0.5f;   // a held solo beats every mute
-        if (patterns.cell (slot, t + 1, step) && audible)
+        if (patterns.cell (slot, t + 1, step) && audible (t))
             noteOn (t, vel, sample, gateSamples);
+}
+
+bool TrossSeqProcessor::audible (int t) const
+{
+    const int solo = momentarySolo.load();
+    return solo >= 0 ? t == solo : raw.mute[t]->load() < 0.5f;   // a held solo beats every mute
+}
+
+// a flam's grace note: `step` is coming up in flamSamples; its flammed hits play now, softer
+void TrossSeqProcessor::doGrace (int step, int sample, juce::int64 flamSamples)
+{
+    // the pattern that will be playing at that step: a queued slot or random result takes over on step 1
+    int slot = currentSlot.load();
+    const Staged* st = nullptr;
+    if (step == 0)
+    {
+        if (pendingSlot.load() >= 0) slot = pendingSlot.load();
+        const int i = staged.load (std::memory_order_acquire);
+        if (i >= 0 && stagedBuf[i].slot == slot) st = &stagedBuf[i];
     }
+    auto rowOf = [&] (int r) { return st != nullptr ? st->rows[r] : patterns.get (slot, r); };
+    const bool accent = (rowOf (0) >> step) & 1;
+    const int vel = (int) (accent ? raw.accentVel->load() : raw.velocity->load());
+    const int graceVel = juce::jmax (1, juce::roundToInt (vel * 0.6f));
+    const auto graceGate = juce::jmax ((juce::int64) 1, flamSamples * 3 / 4);   // over before the main hit
+    for (int t = 0; t < kNumTracks; ++t)
+        if (((rowOf (t + 1) & patterns.getFlams (slot, t + 1)) >> step & 1) && audible (t))
+            noteOn (t, graceVel, sample, graceGate);
 }
 
 // REC while playing: the hit goes into the nearest step (swing taken into account)
@@ -384,6 +412,7 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     const int  len      = juce::jlimit (1, kNumSteps, (int) raw.seqLen->load());
     const int  accVel   = (int) raw.accentVel->load();
     clock.swingAmount   = StepClock::swingFromPercent (raw.swing->load());
+    graceClock.swingAmount = clock.swingAmount;
 
     // ---- transport
     bool playing = false, hostTransport = false;
@@ -411,6 +440,9 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     const double sixteenthsPerSample = bpm / 60.0 * 4.0 / sampleRate;
     const double samplesPerStep = 1.0 / sixteenthsPerSample;
     const auto gateSamples = (juce::int64) std::round (raw.gate->load() / 100.0 * samplesPerStep);
+    const double flamMs = raw.flamTime->load();
+    const auto flamSamples = (juce::int64) std::round (flamMs / 1000.0 * sampleRate);
+    const double flamSixteenths = juce::jmin (0.45, flamSamples * sixteenthsPerSample);   // never more than half a step ahead
     if (isStandalone() && ! hostTransport && playing) internalPpq += numSamples * sixteenthsPerSample / 4.0;
 
     // ---- pattern selector: while playing, a new slot waits until the pattern is back at step 1
@@ -434,6 +466,7 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         }
         wasPlaying = false;
         clock.stop();
+        graceClock.stop();
         playStep = -1;
     }
 
@@ -468,6 +501,8 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         const double q = q0 + i * sixteenthsPerSample;
         if (playing)
         {
+            const auto grace = graceClock.advance (q + flamSixteenths);
+            if (grace >= 0 && seqOn) doGrace (wrapStep (grace, len), i, flamSamples);
             const auto step = clock.advance (q);
             if (step >= 0) doStep (wrapStep (step, len), i, seqOn, gateSamples);
             if (clockOut && directOut.isOpen())
@@ -531,6 +566,10 @@ void TrossSeqProcessor::getStateInformation (juce::MemoryBlock& destData)
         juce::StringArray rows;
         for (int r = 0; r < kNumRows; ++r) rows.add (juce::String::toHexString ((int) patterns.get (s, r)));
         pats.setProperty ("slot" + juce::String (s), rows.joinIntoString (" "), nullptr);
+        juce::StringArray fl;
+        bool any = false;
+        for (int r = 0; r < kNumRows; ++r) { fl.add (juce::String::toHexString ((int) patterns.getFlams (s, r))); any |= patterns.getFlams (s, r) != 0; }
+        if (any) pats.setProperty ("flams" + juce::String (s), fl.joinIntoString (" "), nullptr);
     }
     state.removeChild (state.getChildWithName ("MAP"), nullptr);
     state.appendChild (mapToTree(), nullptr);
@@ -556,6 +595,10 @@ void TrossSeqProcessor::setStateInformation (const void* data, int sizeInBytes)
             rows.addTokens (pats.getProperty ("slot" + juce::String (s)).toString(), " ", "");
             for (int r = 0; r < kNumRows; ++r)
                 patterns.set (s, r, (uint16_t) (r < rows.size() ? rows[r].getHexValue32() & 0xffff : 0));
+            juce::StringArray fl;
+            fl.addTokens (pats.getProperty ("flams" + juce::String (s)).toString(), " ", "");
+            for (int r = 0; r < kNumRows; ++r)
+                patterns.setFlams (s, r, (uint16_t) (r < fl.size() ? fl[r].getHexValue32() & 0xffff : 0));
         }
         state.removeChild (pats, nullptr);
     }
