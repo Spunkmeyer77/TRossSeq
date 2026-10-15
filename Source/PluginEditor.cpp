@@ -1197,6 +1197,22 @@ void TrossSeqEditor::showAbout()
 }
 
 // ================================================================================================
+AboutOverlay::AboutOverlay (TrossSeqProcessor& p) : proc (p)
+{
+    setWantsKeyboardFocus (true);
+    setInterceptsMouseClicks (true, true);
+    manualBtn.getProperties().set ("style", "key");
+    manualBtn.setTooltip ("Opens the TRoss Seq manual (PDF) in your web browser");
+    manualBtn.onClick = [] { juce::URL (kManualUrl).launchInDefaultBrowser(); };
+    addAndMakeVisible (manualBtn);
+}
+
+void AboutOverlay::resized()
+{
+    const auto c = card();
+    manualBtn.setBounds (juce::Rectangle<float> (c.getRight() - 26.0f - 190.0f, c.getY() + 300.0f, 190.0f, 28.0f).toNearestInt());
+}
+
 juce::Rectangle<float> AboutOverlay::card() const
 {
     return juce::Rectangle<float> (760.0f, 400.0f).withCentre (getLocalBounds().toFloat().getCentre());

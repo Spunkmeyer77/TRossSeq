@@ -161,8 +161,11 @@ private:
 class AboutOverlay : public juce::Component
 {
 public:
-    explicit AboutOverlay (TrossSeqProcessor& p) : proc (p) { setWantsKeyboardFocus (true); setInterceptsMouseClicks (true, true); }
+    explicit AboutOverlay (TrossSeqProcessor& p);
     void paint (juce::Graphics&) override;
+    void resized() override;
+    static constexpr const char* kManualUrl = "https://github.com/Spunkmeyer77/TRossSeq/blob/main/docs/TRoss%20Seq%20Manual.pdf";
+    juce::TextButton manualBtn { "OPEN THE MANUAL" };
     void mouseDown (const juce::MouseEvent&) override { setVisible (false); }
     bool keyPressed (const juce::KeyPress& k) override { if (k == juce::KeyPress::escapeKey) { setVisible (false); return true; } return false; }
     juce::Rectangle<float> card() const;
