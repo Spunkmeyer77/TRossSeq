@@ -88,6 +88,19 @@ public:
     // the map + names + port remembered for new instances
     void saveAsDefault();
 
+    // ---- drum map library (message thread): maps are small files in Documents/TRoss Seq/Maps
+    static juce::File mapsFolder();
+    static inline juce::File mapsFolderOverride;   // tests only
+    static juce::StringArray listMaps();           // saved map names, sorted
+    bool saveMap (const juce::String& name);       // current names / notes / channels / locks -> file
+    bool loadMap (const juce::String& name);
+    static bool renameMap (const juce::String& from, const juce::String& to);
+    static bool deleteMap (const juce::String& name);
+    static bool mapExists (const juce::String& name) { return mapFile (name).existsAsFile(); }
+    juce::String getMapName() const { const juce::ScopedLock sl (nameLock); return mapName; }
+    bool isMapModified() const;                    // changed since it was loaded / saved / picked
+    bool isUserMap() const { return mapExists (getMapName()); }
+
     // Standalone app only: no host transport, so it gets its own play button and tempo
     bool isStandalone() const { return wrapperType == wrapperType_Standalone; }
     std::atomic<bool>  internalPlay { false };
@@ -133,7 +146,7 @@ private:
     bool   haveBlockTime = false;
 
     // randomiser: a finished pattern waiting for step 1 (double buffered: UI writes one half, audio reads the other)
-    struct Staged { int slot = 0; uint16_t rows[trossseq::kNumRows] {}; };
+    struct Staged { int slot = 0; uint16_t rows[trossseq::kNumRows] {}; uint16_t clearFlams = 0; };   // clearFlams: bit r = drop row r's flams
     Staged stagedBuf[2];
     int stagedWrite = 0;                    // message thread
     std::atomic<int> staged { -1 };         // index of the buffer waiting, -1 = none
@@ -168,6 +181,10 @@ public:
 private:
     juce::ValueTree mapToTree() const;
     void mapFromTree (const juce::ValueTree&);
+    static juce::File mapFile (const juce::String& name);
+    juce::String mapSignature() const;             // names, notes, channels, locks as one string
+    void setMapIdentity (const juce::String& name) { { const juce::ScopedLock sl (nameLock); mapName = name; mapSnapshot = mapSignature(); } ++nameVersion; }
+    juce::String mapName, mapSnapshot;             // guarded by nameLock
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TrossSeqProcessor)
 };

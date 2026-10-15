@@ -35,13 +35,15 @@ port, so drum boxes with their own sequencers or tempo-synced effects follow alo
 |---|---|
 | VELOCITY / ACCENT | Note velocity for normal steps and for steps with the ACCENT row set |
 | GATE | How long each note is held: 5–95 % of a 16th (most drum boxes only care about the note-on) |
+| FLAM | How far before a flammed step the grace note plays (5–80 ms). **Shift-click** a pad to add a flam, Shift-click again to remove it |
+| HELP | Top right: switches the hover tips on or off (remembered for every copy) |
 | SWING | 50 % = straight, 66.7 % = triplet feel, up to 75 %. Pushes every second 16th later |
 | MIDI THRU | Passes your keyboard / pad controller through to the outputs, so you can play the drum box live |
 | Track name strips | Click to play that drum now (Shift-click = accent). With REC on while the song plays, the hit is recorded. Double-click to rename, right-click for MIDI learn |
 | NOTE / CH | Each track's MIDI note and channel: drag the red read-outs up or down. Note names use Ableton's naming (C1 = 36) |
 | M | Click: mutes the track. **Shift + hold:** solos the track for as long as you hold the mouse button (it plays even if it's muted, every other track goes quiet). Let go and everything is back as it was; nothing gets toggled |
 | LEARN | Click, then hit a key or pad: the track takes that note and channel |
-| PRESETS | Note maps for General MIDI drums, Roland TR-8 / TR-8S and Korg volca beats (the default GM lanes: BD SD LT HT CP CH OH CY RS MT RD CB CL); all tracks on one channel; and **Save map + MIDI port as default**, which new copies of TRoss Seq then start with |
+| PRESETS | Drum map library: built-in maps (General MIDI, Roland TR-8 / TR-8S, Korg volca beats), your own saved maps (Save map as…, Save, Rename, Delete, Show maps folder: `Documents/TRoss Seq/Maps`), all lanes on one channel, and save as default. The panel shows the current map and marks it * EDITED after changes |
 | Step pads | 14 rows (ACCENT + 13 tracks) × 16 steps, in groups of four. Click to toggle, or drag along a row |
 | RUN | Sequencer on/off (MIDI THRU and the name strips still play) |
 | LENGTH | Pattern length, 1–16 steps: drag the red read-out up/down |
@@ -52,7 +54,7 @@ port, so drum boxes with their own sequencers or tempo-synced effects follow alo
 | FILL | Randomises only the last four steps of the pattern, as a fill |
 | UNDO | Goes back to the pattern before the last RANDOM / FILL (up to 32 steps back). While a result is still waiting for step 1, UNDO cancels it |
 | DENSITY | How busy random patterns are |
-| RANDOM STYLE | **Straight** (four on the floor), **Electro** (syncopated kick, sparse snare, busy 16th hats), **Broken** (scattered) |
+| RANDOM STYLE | Straight, Electro, Broken, House, Techno, Detroit, Miami Bass, Breakbeat, Hip-Hop, Dub, Latin, Industrial. The randomiser never adds flams |
 | Lane locks | **Alt-click** (Option-click on a Mac) a track name to lock it: a padlock shows and the randomiser leaves that lane alone. Right-click a name → **Randomise this lane** to roll just that one |
 | EXPORT MIDI | Click to export the playing pattern, all patterns in a row, or all as separate `.mid` files (with each track's note and channel, swing and gate). Drag the key onto a MIDI track to drop the playing pattern in as a clip |
 
@@ -112,5 +114,5 @@ cmake -B build -DTSEQ_BUILD_TESTS=ON && cmake --build build --target TRossSeqTes
 ```
 
 Covers note timing against the host transport, velocity and accent, gate, swing, pattern queueing, LENGTH,
-recording, MIDI learn, mute, Shift-held solo, all 13 lanes, the randomiser (styles, density, locks, mutate, fill, undo), thru / host out, loops, stop flushing, presets, MIDI export, state save/restore,
+recording, MIDI learn, mute, Shift-held solo, all 13 lanes, the randomiser (12 styles, density, locks, mutate, fill, undo), flams, the drum map library, thru / host out, loops, stop flushing, presets, MIDI export, state save/restore,
 and an editor snapshot.

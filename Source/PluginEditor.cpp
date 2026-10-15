@@ -100,6 +100,9 @@ SeqLookAndFeel::SeqLookAndFeel()
     setColour (juce::TextEditor::outlineColourId, col::orange);
     setColour (juce::TextEditor::focusedOutlineColourId, col::orange);
     setColour (juce::CaretComponent::caretColourId, col::ink);
+    setColour (juce::AlertWindow::backgroundColourId, col::darkTop);
+    setColour (juce::AlertWindow::textColourId, col::rowText);
+    setColour (juce::AlertWindow::outlineColourId, col::orange);
 }
 
 void SeqLookAndFeel::drawRotarySlider (juce::Graphics& g, int x, int y, int w, int h, float pos, float start, float end,
@@ -831,9 +834,9 @@ TrossSeqEditor::TrossSeqEditor (TrossSeqProcessor& p)
 
     // ---- randomiser
     addKnob ("density", { 950, kRndY + 40 }, 34).setTooltip ("How busy random patterns are");
-    styleBox.addItemList ({ "STRAIGHT", "ELECTRO", "BROKEN" }, 1);
+    for (int i = 0; i < kNumStyles; ++i) styleBox.addItem (styleName (i), i + 1);
     styleBox.setBounds (990, kRndY + 22, 114, 22);
-    styleBox.setTooltip ("Random style: Straight (four on the floor), Electro (syncopated kick, busy hats), Broken (scattered)");
+    styleBox.setTooltip ("Random style: the character of what RANDOM writes");
     content.addAndMakeVisible (styleBox);
     styleAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, "rstyle", styleBox);
     auto key = [this] (juce::TextButton& b, juce::Rectangle<int> r, const char* tip)
@@ -936,25 +939,127 @@ juce::Slider& TrossSeqEditor::addReadout (juce::Rectangle<int> r, double lo, dou
 
 void TrossSeqEditor::showMapMenu()
 {
+    const auto maps = TrossSeqProcessor::listMaps();
+    const auto current = proc.getMapName();
+    const bool modified = proc.isMapModified();
+
     juce::PopupMenu m;
-    m.addSectionHeader ("Note maps (set all " + juce::String (kNumTracks) + " tracks)");
+    m.addSectionHeader ("Built-in maps (set all " + juce::String (kNumTracks) + " lanes)");
     for (int i = 0; i < TrackMap::kNumPresets; ++i)
-        m.addItem (1 + i, juce::String (TrackMap::preset (i).name) + "  (ch " + juce::String (TrackMap::preset (i).channel) + ")");
+        m.addItem (1 + i, juce::String (TrackMap::preset (i).name) + "  (ch " + juce::String (TrackMap::preset (i).channel) + ")",
+                   true, current == TrackMap::preset (i).name && ! modified);
+
+    m.addSectionHeader ("My maps");
+    if (maps.isEmpty()) m.addItem (-1, "(none saved yet: use Save map as...)", false);
+    for (int i = 0; i < maps.size(); ++i)
+        m.addItem (200 + i, maps[i], true, maps[i] == current && ! modified);
+    m.addSeparator();
+    m.addItem (301, "Save" + (proc.isUserMap() ? " \"" + current + "\"" : juce::String()), proc.isUserMap() && modified);
+    m.addItem (300, "Save map as...");
+    juce::PopupMenu ren, del;
+    for (int i = 0; i < maps.size(); ++i) { ren.addItem (400 + i, maps[i]); del.addItem (500 + i, maps[i]); }
+    m.addSubMenu ("Rename map", ren, ! maps.isEmpty());
+    m.addSubMenu ("Delete map", del, ! maps.isEmpty());
+    m.addItem (302, "Show maps folder");
+
     juce::PopupMenu chans;
     for (int c = 1; c <= 16; ++c) chans.addItem (100 + c, "Channel " + juce::String (c));
     m.addSeparator();
-    m.addSubMenu ("All tracks on channel", chans);
-    m.addSeparator();
+    m.addSubMenu ("All lanes on channel", chans);
     m.addItem (50, "Save map + MIDI port as default for new instances");
+
     m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&mapBtn),
-                     [safe = juce::Component::SafePointer<TrossSeqEditor> (this)] (int id)
+                     [safe = juce::Component::SafePointer<TrossSeqEditor> (this), maps] (int id)
                      {
-                         if (safe == nullptr || id == 0) return;
+                         if (safe == nullptr || id <= 0) return;
                          auto& p = safe->proc;
                          if (id >= 1 && id <= TrackMap::kNumPresets) p.applyPreset (id - 1);
-                         if (id > 100) p.map.setAllChannels (id - 100);
-                         if (id == 50) p.saveAsDefault();
+                         else if (id > 100 && id <= 116) p.map.setAllChannels (id - 100);
+                         else if (id == 50) p.saveAsDefault();
+                         else if (id >= 200 && id < 300) p.loadMap (maps[id - 200]);
+                         else if (id == 300) safe->saveMapAs();
+                         else if (id == 301) p.saveMap (p.getMapName());
+                         else if (id == 302)
+                         {
+                             TrossSeqProcessor::mapsFolder().createDirectory();
+                             TrossSeqProcessor::mapsFolder().revealToUser();
+                         }
+                         else if (id >= 400 && id < 500) safe->renameMap (maps[id - 400]);
+                         else if (id >= 500 && id < 600) safe->deleteMap (maps[id - 500]);
+                         safe->content.repaint (0, 0, kWidth, kTopH);
                      });
+}
+
+// a small name prompt in the panel's colours; `done` gets the trimmed name (not called on Cancel)
+void TrossSeqEditor::askName (const juce::String& title, const juce::String& initial, const juce::String& okText,
+                              std::function<void (juce::String)> done)
+{
+    auto* w = new juce::AlertWindow (title, "Name:", juce::MessageBoxIconType::NoIcon, this);
+    w->setLookAndFeel (&lnf);
+    w->addTextEditor ("name", initial);
+    w->addButton (okText, 1, juce::KeyPress (juce::KeyPress::returnKey));
+    w->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+    if (auto* ed = w->getTextEditor ("name")) { ed->setInputRestrictions (40); ed->selectAll(); }
+    w->enterModalState (true, juce::ModalCallbackFunction::create ([w, done] (int r)
+    {
+        const auto name = w->getTextEditorContents ("name").trim();
+        if (r == 1 && name.isNotEmpty()) done (name);
+    }), true);
+}
+
+void TrossSeqEditor::confirm (const juce::String& title, const juce::String& message, const juce::String& okText,
+                              std::function<void()> yes)
+{
+    auto* w = new juce::AlertWindow (title, message, juce::MessageBoxIconType::NoIcon, this);
+    w->setLookAndFeel (&lnf);
+    w->addButton (okText, 1, juce::KeyPress (juce::KeyPress::returnKey));
+    w->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+    w->enterModalState (true, juce::ModalCallbackFunction::create ([yes] (int r) { if (r == 1) yes(); }), true);
+}
+
+void TrossSeqEditor::saveMapAs()
+{
+    const auto current = proc.getMapName();
+    askName ("Save drum map", current.isNotEmpty() ? current : juce::String ("My drum box"), "Save",
+             [safe = juce::Component::SafePointer<TrossSeqEditor> (this)] (juce::String name)
+             {
+                 if (safe == nullptr) return;
+                 auto save = [safe, name]
+                 {
+                     if (safe == nullptr) return;
+                     if (! safe->proc.saveMap (name))
+                         safe->confirm ("Couldn't save the map", "Check that Documents/TRoss Seq/Maps can be written to.", "OK", [] {});
+                     safe->content.repaint (0, 0, kWidth, kTopH);
+                 };
+                 if (TrossSeqProcessor::mapExists (name))
+                     safe->confirm ("Replace \"" + name + "\"?", "A map with this name already exists.", "Replace", save);
+                 else
+                     save();
+             });
+}
+
+void TrossSeqEditor::renameMap (const juce::String& from)
+{
+    askName ("Rename \"" + from + "\"", from, "Rename",
+             [safe = juce::Component::SafePointer<TrossSeqEditor> (this), from] (juce::String to)
+             {
+                 if (safe == nullptr || to == from) return;
+                 if (! TrossSeqProcessor::renameMap (from, to))
+                     safe->confirm ("Couldn't rename the map", "There may already be a map called \"" + to + "\".", "OK", [] {});
+                 else if (safe->proc.getMapName() == from && ! safe->proc.isMapModified())
+                     safe->proc.loadMap (to);   // keep showing the renamed map as the current one
+                 safe->content.repaint (0, 0, kWidth, kTopH);
+             });
+}
+
+void TrossSeqEditor::deleteMap (const juce::String& name)
+{
+    confirm ("Delete \"" + name + "\"?", "The map file goes to the bin / trash. Lanes keep their current settings.", "Delete",
+             [safe = juce::Component::SafePointer<TrossSeqEditor> (this), name]
+             {
+                 TrossSeqProcessor::deleteMap (name);
+                 if (safe != nullptr) safe->content.repaint (0, 0, kWidth, kTopH);
+             });
 }
 
 void TrossSeqEditor::paint (juce::Graphics& g) { g.fillAll (col::darkBottom); }
@@ -1049,7 +1154,21 @@ void TrossSeqEditor::paintPanel (juce::Graphics& g)
     label ("DRUM MAP", 742, 61, 110, juce::Justification::centredLeft);
     g.setColour (col::softText);
     g.setFont (font (8.0f, false, 0.06f));
-    g.drawText ("SET EACH TRACK'S NOTE + CH BELOW", 742, 104, 220, 12, juce::Justification::centredLeft);
+    {
+        auto name = proc.getMapName();
+        const bool mod = proc.isMapModified();
+        if (name.isEmpty()) name = "CUSTOM";
+        g.setFont (font (8.5f, true, 0.06f));
+        g.setColour (col::printText);
+        const juce::String txt = "MAP: " + name.toUpperCase();
+        g.drawText (txt, 742, 104, 210, 12, juce::Justification::centredLeft, true);
+        if (mod)   // changed since it was picked or saved
+        {
+            const float w = juce::GlyphArrangement::getStringWidth (font (8.5f, true, 0.06f), txt);
+            g.setColour (col::orange);
+            g.drawText ("*  EDITED", 742 + (int) juce::jmin (w, 150.0f) + 4, 104, 60, 12, juce::Justification::centredLeft);
+        }
+    }
 
     // right section: pattern display, and PLAY / BPM in the standalone app
     g.setColour (juce::Colours::black.withAlpha (0.05f));
@@ -1100,6 +1219,10 @@ void TrossSeqEditor::timerCallback()
 
     // track map: follow presets, MIDI learn and state loads (but not while the user drags a read-out)
     const int mv = proc.map.getVersion();
+    {
+        const auto label = proc.getMapName() + (proc.isMapModified() ? "*" : "");
+        if (label != lastMapLabel) { content.repaint (730, 58, 240, 62); lastMapLabel = label; }
+    }
     if (mv != lastMapVersion)
     {
         for (int t = 0; t < kNumTracks; ++t)

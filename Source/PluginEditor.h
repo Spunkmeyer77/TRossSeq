@@ -213,6 +213,12 @@ private:
     juce::Button& addButton (const juce::String& paramId, const juce::String& text, juce::Rectangle<int> r, const char* style);
     juce::Slider& addReadout (juce::Rectangle<int> r, double lo, double hi, std::function<juce::String (double)> text);
     void showMapMenu();
+    void saveMapAs();
+    void renameMap (const juce::String& from);
+    void deleteMap (const juce::String& name);
+    void askName (const juce::String& title, const juce::String& initial, const juce::String& okText, std::function<void (juce::String)> done);
+    void confirm (const juce::String& title, const juce::String& message, const juce::String& okText, std::function<void()> yes);
+    juce::String lastMapLabel;
     void paintPanel (juce::Graphics&);
     void timerCallback() override;
 

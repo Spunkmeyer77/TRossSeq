@@ -11,9 +11,15 @@
 namespace trossseq
 {
 enum class Role { Kick, Snare, Clap, ClosedHat, OpenHat, Cymbal, Tom, Perc };
-enum class Style { Straight, Electro, Broken };
-constexpr int kNumStyles = 3;
-inline const char* styleName (int s) { static const char* n[kNumStyles] = { "STRAIGHT", "ELECTRO", "BROKEN" }; return n[s < 0 || s >= kNumStyles ? 0 : s]; }
+// (new styles go at the end: projects store the style's position)
+enum class Style { Straight, Electro, Broken, House, Techno, Detroit, MiamiBass, Breakbeat, HipHop, Dub, Latin, Industrial };
+constexpr int kNumStyles = 12;
+inline const char* styleName (int s)
+{
+    static const char* n[kNumStyles] = { "STRAIGHT", "ELECTRO", "BROKEN", "HOUSE", "TECHNO", "DETROIT", "MIAMI BASS",
+                                         "BREAKBEAT", "HIP-HOP", "DUB", "LATIN", "INDUSTRIAL" };
+    return n[s < 0 || s >= kNumStyles ? 0 : s];
+}
 
 // ---- which kind of drum a lane is: its name first (so renamed lanes work), then its MIDI note
 inline Role roleFor (std::string name, int note)
@@ -44,6 +50,161 @@ inline Role roleFor (std::string name, int note)
         case 41: case 43: case 45: case 47: case 48: case 50: return Role::Tom;
         default:                                            return Role::Perc;
     }
+}
+
+// table helper: weight of step s from a 16-value list
+inline float tbl (const float (&t)[16], int s) { return t[s & 15]; }
+
+// the styles added in 0.4.0
+inline float styleWeight2 (Role r, Style st, int s)
+{
+    const bool beat = s % 4 == 0, eighth = s % 2 == 0, back = s == 4 || s == 12, offEighth = eighth && ! beat;
+    switch (st)
+    {
+        case Style::House:       // four on the floor, open hat on the off-beat, clap on the backbeat
+            switch (r)
+            {
+                case Role::Kick:      return beat ? 1.0f : 0.03f;
+                case Role::Snare:     return back ? 0.25f : 0.03f;
+                case Role::Clap:      return back ? 1.0f : s == 15 ? 0.06f : 0.03f;
+                case Role::ClosedHat: return eighth ? (beat ? 0.35f : 0.3f) : 0.55f;
+                case Role::OpenHat:   return offEighth ? 0.9f : 0.02f;
+                case Role::Cymbal:    return s == 0 ? 0.15f : 0.01f;
+                case Role::Tom:       return s >= 12 ? 0.12f : 0.03f;
+                case Role::Perc:      return eighth ? 0.05f : 0.15f;
+            }
+            break;
+        case Style::Techno:      // driving kick, rolling 16th hats, percussion building tension
+            switch (r)
+            {
+                case Role::Kick:      return beat ? 1.0f : (s == 14 || s == 15) ? 0.08f : 0.03f;
+                case Role::Snare:     return s == 12 ? 0.2f : 0.04f;
+                case Role::Clap:      return back ? 0.6f : 0.03f;
+                case Role::ClosedHat: return 0.75f;
+                case Role::OpenHat:   return offEighth ? 0.6f : 0.02f;
+                case Role::Cymbal:    return s == 0 ? 0.25f : 0.01f;
+                case Role::Tom:       return eighth ? 0.06f : 0.1f;
+                case Role::Perc:      return eighth ? 0.12f : 0.3f;
+            }
+            break;
+        case Style::Detroit:     // soulful techno: syncopated hats and claps, cowbell / clave figures
+        {
+            static const float perc[16] = { 0.2f, 0.06f, 0.08f, 0.45f, 0.06f, 0.08f, 0.45f, 0.06f,
+                                            0.2f, 0.06f, 0.45f, 0.08f, 0.06f, 0.08f, 0.45f, 0.06f };
+            switch (r)
+            {
+                case Role::Kick:      return s == 0 ? 1.0f : beat ? 0.95f : s == 14 ? 0.2f : s == 7 ? 0.12f : 0.04f;
+                case Role::Snare:     return back ? 0.5f : 0.03f;
+                case Role::Clap:      return back ? 0.7f : s == 11 ? 0.15f : 0.03f;
+                case Role::ClosedHat: return eighth ? 0.7f : 0.4f;
+                case Role::OpenHat:   return offEighth ? 0.45f : 0.02f;
+                case Role::Cymbal:    return s == 0 ? 0.2f : 0.01f;
+                case Role::Tom:       return (s == 3 || s == 11 || s >= 13) ? 0.15f : 0.04f;
+                case Role::Perc:      return tbl (perc, s);
+            }
+            break;
+        }
+        case Style::MiamiBass:   // booming, bouncy kick figures, snare on 13, fast hats and toms
+        {
+            static const float kick[16] = { 1.0f, 0.05f, 0.05f, 0.5f, 0.05f, 0.05f, 0.55f, 0.35f,
+                                            0.08f, 0.05f, 0.5f, 0.35f, 0.05f, 0.05f, 0.25f, 0.08f };
+            switch (r)
+            {
+                case Role::Kick:      return tbl (kick, s);
+                case Role::Snare:     return s == 12 ? 1.0f : s == 4 ? 0.85f : s == 15 ? 0.12f : 0.02f;
+                case Role::Clap:      return s == 12 ? 0.6f : s == 4 ? 0.5f : 0.02f;
+                case Role::ClosedHat: return 0.85f;
+                case Role::OpenHat:   return s == 14 ? 0.3f : s == 6 ? 0.2f : 0.02f;
+                case Role::Cymbal:    return s == 0 ? 0.25f : 0.01f;
+                case Role::Tom:       return s >= 12 ? 0.3f : s == 9 ? 0.1f : 0.03f;
+                case Role::Perc:      return (s == 2 || s == 10) ? 0.25f : eighth ? 0.04f : 0.12f;
+            }
+            break;
+        }
+        case Style::Breakbeat:   // funky break: kick on 1 and around 11, snare on 5 and 13 with ghost notes
+        {
+            static const float kick[16] = { 1.0f, 0.04f, 0.3f, 0.04f, 0.04f, 0.04f, 0.04f, 0.25f,
+                                            0.06f, 0.04f, 0.7f, 0.2f, 0.04f, 0.04f, 0.08f, 0.06f };
+            switch (r)
+            {
+                case Role::Kick:      return tbl (kick, s);
+                case Role::Snare:     return back ? 1.0f : (s == 7 || s == 9 || s == 14 || s == 15) ? 0.22f : 0.05f;
+                case Role::Clap:      return back ? 0.25f : 0.02f;
+                case Role::ClosedHat: return eighth ? 0.8f : 0.35f;
+                case Role::OpenHat:   return (s == 6 || s == 14) ? 0.3f : (s == 2 || s == 10) ? 0.12f : 0.02f;
+                case Role::Cymbal:    return s == 0 ? 0.3f : 0.01f;
+                case Role::Tom:       return s >= 13 ? 0.2f : 0.03f;
+                case Role::Perc:      return 0.1f;
+            }
+            break;
+        }
+        case Style::HipHop:      // laid back: sparse kick, heavy backbeat, simple 8th hats (use SWING)
+        {
+            static const float kick[16] = { 1.0f, 0.03f, 0.03f, 0.2f, 0.03f, 0.03f, 0.03f, 0.35f,
+                                            0.05f, 0.03f, 0.55f, 0.25f, 0.03f, 0.03f, 0.15f, 0.03f };
+            switch (r)
+            {
+                case Role::Kick:      return tbl (kick, s);
+                case Role::Snare:     return back ? 1.0f : s == 15 ? 0.12f : s == 11 ? 0.08f : 0.02f;
+                case Role::Clap:      return back ? 0.35f : 0.02f;
+                case Role::ClosedHat: return eighth ? 0.85f : 0.1f;
+                case Role::OpenHat:   return s == 14 ? 0.2f : s == 6 ? 0.1f : 0.01f;
+                case Role::Cymbal:    return s == 0 ? 0.1f : 0.01f;
+                case Role::Tom:       return 0.03f;
+                case Role::Perc:      return eighth ? 0.04f : 0.08f;
+            }
+            break;
+        }
+        case Style::Dub:         // sparse and spacious, rim shots instead of snares
+        {
+            static const float perc[16] = { 0.04f, 0.04f, 0.04f, 0.04f, 0.45f, 0.04f, 0.04f, 0.15f,
+                                            0.04f, 0.04f, 0.04f, 0.04f, 0.8f, 0.04f, 0.04f, 0.15f };
+            switch (r)
+            {
+                case Role::Kick:      return s == 0 ? 1.0f : s == 8 ? 0.6f : s == 10 ? 0.2f : s == 14 ? 0.15f : 0.03f;
+                case Role::Snare:     return s == 12 ? 0.3f : 0.01f;
+                case Role::Clap:      return s == 12 ? 0.2f : 0.01f;
+                case Role::ClosedHat: return offEighth ? 0.5f : 0.15f;
+                case Role::OpenHat:   return (s == 6 || s == 14) ? 0.25f : 0.01f;
+                case Role::Cymbal:    return s == 0 ? 0.1f : 0.01f;
+                case Role::Tom:       return s >= 12 ? 0.08f : 0.03f;
+                case Role::Perc:      return tbl (perc, s);
+            }
+            break;
+        }
+        case Style::Latin:       // built around the son clave, with cowbell, agogo and toms interlocking
+        {
+            static const float clave[16] = { 0.85f, 0.08f, 0.08f, 0.85f, 0.08f, 0.08f, 0.85f, 0.08f,
+                                             0.08f, 0.08f, 0.85f, 0.08f, 0.85f, 0.08f, 0.08f, 0.08f };
+            switch (r)
+            {
+                case Role::Kick:      return s == 0 ? 1.0f : s == 8 ? 0.6f : (s == 3 || s == 11) ? 0.3f : 0.04f;
+                case Role::Snare:     return s == 12 ? 0.3f : s == 7 ? 0.1f : 0.02f;
+                case Role::Clap:      return back ? 0.3f : 0.02f;
+                case Role::ClosedHat: return eighth ? 0.7f : 0.4f;
+                case Role::OpenHat:   return (s == 6 || s == 14) ? 0.2f : 0.02f;
+                case Role::Cymbal:    return s == 0 ? 0.1f : 0.01f;
+                case Role::Tom:       return (s == 6 || s == 7 || s == 14 || s == 15) ? 0.35f : s == 10 ? 0.25f : 0.06f;
+                case Role::Perc:      return tbl (clave, s);
+            }
+            break;
+        }
+        case Style::Industrial:  // hard and mechanical: kick and snare on the grid, few hats
+            switch (r)
+            {
+                case Role::Kick:      return beat ? 1.0f : (s == 2 || s == 10) ? 0.15f : 0.03f;
+                case Role::Snare:     return back ? 1.0f : 0.02f;
+                case Role::Clap:      return back ? 0.4f : 0.02f;
+                case Role::ClosedHat: return eighth ? 0.35f : 0.05f;
+                case Role::OpenHat:   return 0.05f;
+                case Role::Cymbal:    return s == 0 ? 0.2f : 0.01f;
+                case Role::Tom:       return s >= 12 ? 0.12f : 0.06f;
+                case Role::Perc:      return eighth ? 0.15f : 0.05f;
+            }
+            break;
+        default: break;
+    }
+    return 0.0f;
 }
 
 // ---- chance (0..1) that a step plays, per role and style. 1.0 = anchor: always there (at any density)
@@ -96,8 +257,9 @@ inline float stepWeight (Role r, Style st, int s)
                 case Role::Perc:      return 0.18f;
             }
             break;
+        default: break;
     }
-    return 0.0f;
+    return styleWeight2 (r, st, s);
 }
 
 // weights for the fill steps (the last four of the pattern)

@@ -433,6 +433,44 @@ int main (int argc, char** argv)
         }
         check (fillOnly && fillChanged > 0, "FILL: only steps 13-16 change");
 
+        // every style: kick on 1, nothing past LENGTH, no open/closed hat clash, a sensible amount of notes
+        {
+            check (kNumStyles == 12 && juce::String (styleName (6)) == "MIAMI BASS" && juce::String (styleName (11)) == "INDUSTRIAL", "12 random styles");
+            bool allOk = true;
+            juce::String report;
+            for (int st = 0; st < kNumStyles; ++st)
+            {
+                int notes = 0; bool kick1 = true, clash = false;
+                for (int i = 0; i < 100; ++i)
+                {
+                    uint16_t rows[kNumRows] {};
+                    rz.generate (rows, lanes, 16, (Style) st, 50.0f);
+                    kick1 &= (rows[1] & 1) != 0;
+                    clash |= (rows[6] & rows[7]) != 0;
+                    for (int r = 1; r < kNumRows; ++r) notes += __builtin_popcount (rows[r]);
+                }
+                const double perBar = notes / 100.0;
+                report << styleName (st) << " " << juce::String (perBar, 1) << "  ";
+                allOk &= kick1 && ! clash && perBar > 6 && perBar < 70;
+            }
+            std::printf ("notes per bar: %s\n", report.toRawUTF8());
+            check (allOk, "every style: kick on step 1, hats don't clash, sensible note count");
+
+            // style character checks (200 rolls each)
+            auto avg = [&] (Style st, int row, int step)
+            {
+                int on = 0;
+                for (int i = 0; i < 200; ++i) { uint16_t rows[kNumRows] {}; rz.generate (rows, lanes, 16, st, 50.0f); on += (rows[row] >> step) & 1; }
+                return on / 200.0;
+            };
+            check (avg (Style::House, 1, 4) == 1.0 && avg (Style::House, 1, 12) == 1.0 && avg (Style::House, 7, 2) > 0.7,
+                   "HOUSE: kick on every beat, open hat on the off-beats");
+            check (avg (Style::Industrial, 2, 4) == 1.0 && avg (Style::Industrial, 1, 8) == 1.0, "INDUSTRIAL: kick and snare locked to the grid");
+            check (avg (Style::Latin, 13, 3) > 0.7 && avg (Style::Latin, 13, 6) > 0.7 && avg (Style::Latin, 13, 1) < 0.2, "LATIN: claves lane follows the clave");
+            check (avg (Style::Dub, 9, 12) > 0.6 && avg (Style::Dub, 2, 4) < 0.1, "DUB: rim shot on 13 instead of a snare backbeat");
+            check (avg (Style::HipHop, 2, 4) == 1.0 && avg (Style::HipHop, 6, 1) < 0.2, "HIP-HOP: heavy backbeat, simple 8th hats");
+        }
+
         // through the plug-in: stopped = at once, playing = waits for step 1, UNDO
         host.playing = false;
         run (2);
@@ -474,6 +512,55 @@ int main (int argc, char** argv)
         run (2);
         proc.randomise (TrossSeqProcessor::RandomOp::Lane, 5);   // CH only
         check (pats.get (slot, 6) != 0 && pats.get (slot, 1) == 0, "Randomise this lane: only CH written");
+
+        // flams: the randomiser never adds any; RANDOM drops them on the lanes it rewrites, locked lanes keep theirs
+        {
+            pats.clear (slot);
+            pats.setCell (slot, 11, 9, true); pats.setFlam (slot, 11, 9, true);   // RD (locked) with a flam
+            pats.setCell (slot, 2, 4, true);  pats.setFlam (slot, 2, 4, true);    // snare flam, unlocked lane
+            for (int st = 0; st < kNumStyles; ++st)
+            {
+                setP ("rstyle", (float) st);
+                proc.randomise (TrossSeqProcessor::RandomOp::NewPattern);
+            }
+            int flamCount = 0;
+            for (int r = 1; r < kNumRows; ++r) flamCount += __builtin_popcount (pats.getFlams (slot, r));
+            check (flamCount == 1 && pats.flam (slot, 11, 9), "RANDOM adds no flams, drops them on rewritten lanes, locked lane keeps its flam");
+            proc.undoRandom();
+            for (int i = 0; i < 11; ++i) proc.undoRandom();
+            check (pats.flam (slot, 2, 4), "UNDO brings the hand-set flam back");
+            setP ("rstyle", 0.0f);
+        }
+    }
+
+    // 14c. drum map library
+    {
+        auto dir = outDir.getChildFile ("maps");
+        dir.deleteRecursively();
+        TrossSeqProcessor::mapsFolderOverride = dir;
+        TrossSeqProcessor mp;
+        check (mp.getMapName() == "General MIDI drums" && ! mp.isMapModified(), "a new instance starts on the GM map, unedited");
+        mp.map.setNote (0, 35);
+        check (mp.isMapModified(), "changing a note marks the map as edited");
+        mp.setTrackName (0, "KICK2");
+        mp.toggleLock (3);
+        check (mp.saveMap ("My Drum Box") && mp.getMapName() == "My Drum Box" && ! mp.isMapModified(), "Save map as: file written, map named, no longer edited");
+        check (TrossSeqProcessor::listMaps() == juce::StringArray { "My Drum Box" }, "the map shows up in the list");
+        mp.applyPreset (1);
+        check (mp.getMapName() == "Roland TR-8 / TR-8S" && mp.map.note (0) == 36, "picking a built-in map renames and resets the lanes");
+        check (mp.loadMap ("My Drum Box") && mp.map.note (0) == 35 && mp.getTrackName (0) == "KICK2" && mp.locked[3].load()
+               && ! mp.isMapModified(), "loading the saved map brings back notes, names and locks");
+        check (TrossSeqProcessor::renameMap ("My Drum Box", "RD-8") && TrossSeqProcessor::listMaps() == juce::StringArray { "RD-8" },
+               "rename a map");
+        check (! TrossSeqProcessor::renameMap ("RD-8", "RD-8") && ! TrossSeqProcessor::renameMap ("nope", "x"), "rename refuses clashes and missing maps");
+        mp.saveMap ("Second");
+        mp.map.setChannel (2, 5);
+        juce::MemoryBlock ms; mp.getStateInformation (ms);
+        TrossSeqProcessor other;
+        other.setStateInformation (ms.getData(), (int) ms.getSize());
+        check (other.getMapName() == "Second" && other.isMapModified() && other.map.channel (2) == 5, "map name and the edited mark are saved with the project");
+        check (TrossSeqProcessor::deleteMap ("RD-8") && TrossSeqProcessor::listMaps() == juce::StringArray { "Second" }, "delete a map");
+        TrossSeqProcessor::mapsFolderOverride = juce::File();
     }
 
     // 15. state round trip: patterns, map, names, slot

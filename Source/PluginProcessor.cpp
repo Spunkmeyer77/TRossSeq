@@ -41,7 +41,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout TrossSeqProcessor::createLay
                                       [] (float v, int) { return juce::String (v, 1) + " ms"; })));
     l.add (pct ("density", "Random Density", 0.0f, 100.0f, 50.0f));
     l.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "rstyle", 1 }, "Random Style",
-                                                         juce::StringArray { "Straight", "Electro", "Broken" }, 0));
+                                                         juce::StringArray { "Straight", "Electro", "Broken", "House", "Techno", "Detroit", "Miami Bass",
+                                                                             "Breakbeat", "Hip-Hop", "Dub", "Latin", "Industrial" }, 0));
     for (int t = 0; t < kNumTracks; ++t)
         l.add (onOff ("mute" + juce::String (t + 1), "Track " + juce::String (t + 1) + " Mute", false));
     return l;
@@ -123,11 +124,97 @@ void TrossSeqProcessor::applyPreset (int i)
         for (int t = 0; t < kNumTracks; ++t) names.add (p.labels[t]);
     }
     ++nameVersion;
+    setMapIdentity (p.name);
+}
+
+// ---- drum map library
+juce::File TrossSeqProcessor::mapsFolder()
+{
+    if (mapsFolderOverride != juce::File()) return mapsFolderOverride;
+    return juce::File::getSpecialLocation (juce::File::userDocumentsDirectory).getChildFile ("TRoss Seq").getChildFile ("Maps");
+}
+
+juce::File TrossSeqProcessor::mapFile (const juce::String& name)
+{
+    return mapsFolder().getChildFile (juce::File::createLegalFileName (name.trim()) + ".tsmap");
+}
+
+juce::StringArray TrossSeqProcessor::listMaps()
+{
+    juce::StringArray names;
+    for (auto& f : mapsFolder().findChildFiles (juce::File::findFiles, false, "*.tsmap"))
+        names.add (f.getFileNameWithoutExtension());
+    names.sortNatural();
+    return names;
+}
+
+juce::String TrossSeqProcessor::mapSignature() const
+{
+    juce::String sig;
+    for (int t = 0; t < kNumTracks; ++t)
+        sig << getTrackName (t) << '|' << map.note (t) << '|' << map.channel (t) << '|' << (locked[t].load() ? 1 : 0) << ';';
+    return sig;
+}
+
+bool TrossSeqProcessor::isMapModified() const
+{
+    const auto sig = mapSignature();
+    const juce::ScopedLock sl (nameLock);
+    return sig != mapSnapshot;
+}
+
+bool TrossSeqProcessor::saveMap (const juce::String& name)
+{
+    const auto clean = juce::File::createLegalFileName (name.trim());
+    if (clean.isEmpty()) return false;
+    const auto f = mapFile (clean);
+    f.getParentDirectory().createDirectory();
+    juce::ValueTree root ("TROSSSEQMAP");
+    root.setProperty ("name", clean, nullptr);
+    root.setProperty ("version", 1, nullptr);
+    root.appendChild (mapToTree(), nullptr);
+    auto xml = root.createXml();
+    if (xml == nullptr || ! xml->writeTo (f)) return false;
+    setMapIdentity (clean);
+    return true;
+}
+
+bool TrossSeqProcessor::loadMap (const juce::String& name)
+{
+    auto xml = juce::XmlDocument::parse (mapFile (name));
+    if (xml == nullptr || ! xml->hasTagName ("TROSSSEQMAP")) return false;
+    const auto root = juce::ValueTree::fromXml (*xml);
+    const auto m = root.getChildWithName ("MAP");
+    if (! m.isValid()) return false;
+    mapFromTree (m);
+    setMapIdentity (mapFile (name).getFileNameWithoutExtension());
+    return true;
+}
+
+bool TrossSeqProcessor::renameMap (const juce::String& from, const juce::String& to)
+{
+    const auto src = mapFile (from), dst = mapFile (to);
+    if (! src.existsAsFile() || dst.existsAsFile() || juce::File::createLegalFileName (to.trim()).isEmpty()) return false;
+    auto xml = juce::XmlDocument::parse (src);
+    if (xml == nullptr) return false;
+    xml->setAttribute ("name", dst.getFileNameWithoutExtension());
+    return xml->writeTo (dst) && src.deleteFile();
+}
+
+bool TrossSeqProcessor::deleteMap (const juce::String& name)
+{
+    const auto f = mapFile (name);
+    return f.existsAsFile() && (f.moveToTrash() || f.deleteFile());
 }
 
 juce::ValueTree TrossSeqProcessor::mapToTree() const
 {
     juce::ValueTree t ("MAP");
+    {
+        const juce::ScopedLock sl (nameLock);
+        t.setProperty ("mapName", mapName, nullptr);
+        t.setProperty ("snapshot", mapSnapshot, nullptr);
+    }
     for (int i = 0; i < kNumTracks; ++i)
     {
         juce::ValueTree tr ("TRACK");
@@ -152,6 +239,13 @@ void TrossSeqProcessor::mapFromTree (const juce::ValueTree& t)
         setTrackName (i, tr.getProperty ("name", getTrackName (i)).toString());
         locked[i] = (bool) tr.getProperty ("locked", false);
     }
+    if (t.hasProperty ("mapName"))   // which map this is, and how it looked when picked (for the * mark)
+    {
+        { const juce::ScopedLock sl (nameLock); mapName = t["mapName"].toString(); mapSnapshot = t["snapshot"].toString(); }
+        ++nameVersion;
+    }
+    else
+        setMapIdentity ({});   // older projects: an unnamed map
 }
 
 void TrossSeqProcessor::saveAsDefault()
@@ -245,6 +339,13 @@ void TrossSeqProcessor::randomise (RandomOp op, int track)
     for (int t = 0; t < kNumTracks; ++t)
         lanes[t] = { roleFor (getTrackName (t).toStdString(), map.note (t)), locked[t].load() };
 
+    // a new pattern (or lane) drops the flams on the lanes it rewrites; flams are only ever set by hand
+    uint16_t clearFlams = 0;
+    if (op == RandomOp::NewPattern)
+        for (int t = 0; t < kNumTracks; ++t) if (! lanes[t].locked) clearFlams |= (uint16_t) (1u << (t + 1));
+    if (op == RandomOp::Lane && track >= 0 && track < kNumTracks) clearFlams = (uint16_t) (1u << (track + 1));
+    if (replaceWaiting) clearFlams |= stagedBuf[waiting].clearFlams;
+
     switch (op)
     {
         case RandomOp::NewPattern: rnd.generate (rows, lanes, len, style, density); break;
@@ -259,11 +360,16 @@ void TrossSeqProcessor::randomise (RandomOp op, int track)
         auto& b = stagedBuf[stagedWrite];
         b.slot = slot;
         std::copy (rows, rows + kNumRows, b.rows);
+        b.clearFlams = clearFlams;
         staged.store (stagedWrite, std::memory_order_release);
         stagedWrite = 1 - stagedWrite;
     }
     else
-        for (int r = 1; r < kNumRows; ++r) patterns.set (slot, r, rows[r]);   // accent row stays as it is
+        for (int r = 1; r < kNumRows; ++r)   // accent row stays as it is
+        {
+            patterns.set (slot, r, rows[r]);
+            if ((clearFlams >> r) & 1) patterns.setFlams (slot, r, 0);
+        }
 }
 
 bool TrossSeqProcessor::undoRandom()
@@ -285,7 +391,11 @@ void TrossSeqProcessor::applyStaged()
     const int i = staged.exchange (-1, std::memory_order_acq_rel);
     if (i < 0) return;
     const auto& b = stagedBuf[i];
-    for (int r = 1; r < kNumRows; ++r) patterns.set (b.slot, r, b.rows[r]);
+    for (int r = 1; r < kNumRows; ++r)
+    {
+        patterns.set (b.slot, r, b.rows[r]);
+        if ((b.clearFlams >> r) & 1) patterns.setFlams (b.slot, r, 0);
+    }
 }
 
 // keeps a steady time base for the port output: follows the wall clock, but smooths out the
@@ -379,8 +489,11 @@ void TrossSeqProcessor::doGrace (int step, int sample, juce::int64 flamSamples)
     const int graceVel = juce::jmax (1, juce::roundToInt (vel * 0.6f));
     const auto graceGate = juce::jmax ((juce::int64) 1, flamSamples * 3 / 4);   // over before the main hit
     for (int t = 0; t < kNumTracks; ++t)
-        if (((rowOf (t + 1) & patterns.getFlams (slot, t + 1)) >> step & 1) && audible (t))
+    {
+        const uint16_t fl = (st != nullptr && ((st->clearFlams >> (t + 1)) & 1)) ? 0 : patterns.getFlams (slot, t + 1);
+        if (((rowOf (t + 1) & fl) >> step & 1) && audible (t))
             noteOn (t, graceVel, sample, graceGate);
+    }
 }
 
 // REC while playing: the hit goes into the nearest step (swing taken into account)
