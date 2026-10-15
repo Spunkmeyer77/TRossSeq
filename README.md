@@ -11,14 +11,20 @@ There are two outputs, and you can use either or both:
 
 | Output | How it works | Use it when |
 |---|---|---|
-| **MIDI OUT PORT** | TRoss Seq sends straight to the MIDI port you pick (a USB/DIN MIDI interface, or a drum box with USB MIDI) | Works in every host. The easy route in Ableton Live and Logic |
-| **HOST OUT** | The notes go to the host's MIDI out, and you route them to the drum machine there | Hosts that pass MIDI out of plug-ins (Bitwig, Reaper, Cubase, Studio One...) |
+| **MIDI OUT PORT** | TRoss Seq sends straight to the MIDI port you pick (a USB/DIN MIDI interface, a drum box with USB MIDI, or a software drum box app) | Hardware drum boxes in every DAW, and standalone software drum boxes |
+| **HOST OUT** | The notes go to the host's MIDI out, and you route them to the drum box plug-in's track | Software drum box plug-ins: Ableton Live (VST3), Logic 11+, Bitwig, Reaper, Cubase, Studio One... |
 
-If both send to the same drum machine, you'll hear every note twice. Turn **HOST OUT** off, or set
+If both send to the same drum box, you'll hear every note twice. Turn **HOST OUT** off, or set
 **MIDI OUT PORT** to **NONE**.
 
-**Ableton Live:** put TRoss Seq on a MIDI track and pick your interface under **MIDI OUT PORT**.
-Live doesn't route MIDI coming out of AU/VST3 plug-ins, so the port output is the way to go there.
+**Ableton Live:** use the VST3. Hardware: pick the interface under MIDI OUT PORT. Software plug-in: on a second MIDI track
+set **MIDI From** to the TRoss Seq track, the chooser below to **TRoss Seq**, and Monitor to **In** (Live can't take MIDI out of AU plug-ins).
+
+**Logic Pro (11+):** on the drum plug-in's track, Track Inspector → **Internal MIDI In** → Instrument Output → the TRoss Seq track, with Input Monitoring on.
+
+**Bitwig Studio:** on the drum plug-in's track, set the note input to the TRoss Seq track (or use a Note Receiver device).
+
+The manual's chapter 3 has the full steps.
 
 **Windows:** most classic Windows MIDI drivers let only one program use a port at a time. If the port shows
 an error, disable it in your DAW's MIDI settings so TRoss Seq can open it.

@@ -93,7 +93,7 @@
   <div class="toc">
     <div><span>1</span><span>What TRoss Seq does</span></div>
     <div><span>2</span><span>Installing</span></div>
-    <div><span>3</span><span>Quick start in Ableton Live</span></div>
+    <div><span>3</span><span>Setting up in Live, Logic and Bitwig</span></div>
     <div><span>4</span><span>The panel at a glance</span></div>
     <div><span>5</span><span>Getting the notes to your drum machine</span></div>
     <div><span>6</span><span>Tracks: names, notes, channels</span></div>
@@ -135,7 +135,7 @@
     <li>Follow the installer. It puts the Audio Unit in <code>/Library/Audio/Plug-Ins/Components</code> and the VST3 in <code>/Library/Audio/Plug-Ins/VST3</code>. Click <b>Customize</b> to install only one of them.</li>
     <li>In Ableton Live, open <b>Settings → Plug-Ins</b>, check that Audio Units (and/or VST3) are switched on, then hold <span class="mod">Option</span> and click <b>Rescan</b>.</li>
   </ol>
-  <p>You'll find it in Live's browser under <b>Plug-Ins → Audio Units → Ticco Ross → TRoss Seq</b> (or under VST3).</p>
+  <p>Logic and other Audio Unit hosts find it under <b>AU Instruments → Ticco Ross</b>; Live and Bitwig under <b>VST3 → Ticco Ross</b>. Section 3 has the setup for each.</p>
 
   <h3>Windows</h3>
   <p>Run <b>TRossSeq-0.6.1-Windows-Setup.exe</b>. If SmartScreen appears, click <b>More info → Run anyway</b>. The VST3 goes to <code>C:\Program Files\Common Files\VST3</code>. Rescan plug-ins in your DAW.</p>
@@ -147,16 +147,54 @@
   <p>Install the new version over the old one, then rescan. Your projects keep their patterns and settings. The version number is shown at the top right of the panel.</p>
 
   <section class="flow">
-    <h2><span class="n">3</span>Quick start in Ableton Live</h2>
+    <h2><span class="n">3</span>Setting up in Live, Logic and Bitwig</h2>
+    <p class="lead">Pick the route for the kind of drum box you're playing, then follow the steps for your DAW.</p>
+    <table>
+      <tr><th>Drum box</th><th>Route</th><th>Why</th></tr>
+      <tr><td>Hardware</td><td><b>MIDI OUT PORT</b> → your MIDI interface or the drum box's USB MIDI</td><td>Works the same in every DAW, keeps every lane on its own channel, and has its own tight timing.</td></tr>
+      <tr><td>Software plug-in</td><td><b>HOST OUT</b> → routed by the DAW to the plug-in's track</td><td>Stays inside the DAW, nothing extra to set up.</td></tr>
+      <tr><td>Software app (standalone)</td><td><b>MIDI OUT PORT</b> → the app's MIDI input, or a virtual MIDI port</td><td>The app runs outside the DAW, so it needs a MIDI port (section 6).</td></tr>
+    </table>
+    <p>In every DAW: open <span class="key">PRESETS</span> and pick the map for your drum box (or set each lane's NOTE and CH, section 6), then press play in the DAW. TRoss Seq follows its tempo, start, stop and loops. Use one route per drum box: with both MIDI OUT PORT and HOST OUT reaching the same box, every note plays twice.</p>
+
+    <h3>Ableton Live</h3>
+    <p>Use the <b>VST3</b> version: <b>Plug-Ins → VST3 → Ticco Ross → TRoss Seq</b>. Live can't take MIDI out of AU plug-ins, so the AU version only works with MIDI OUT PORT.</p>
+    <p><b>Hardware drum box</b></p>
     <ol class="steps">
-      <li>Connect your drum machine to your computer: a MIDI interface (DIN cable to the drum box's MIDI IN), or USB if the drum box has USB MIDI.</li>
-      <li>Create a <b>MIDI track</b> and drop <b>TRoss Seq</b> on it.</li>
+      <li>Create a <b>MIDI track</b> and drop TRoss Seq on it.</li>
       <li>Under <b>MIDI OUT PORT</b>, pick your interface or drum box. The line underneath should read <span style="color:#3f8f3a;font-weight:700;font-size:8pt">CONNECTED</span>.</li>
-      <li>Open <span class="key">PRESETS</span> and pick the map that matches your drum box, or set each lane's <b>NOTE</b> and <b>CH</b> by hand (section 6). Most drum boxes listen on channel 10.</li>
-      <li>Press play in Live. The step lights run along with Live's transport.</li>
-      <li>Click pads to program a beat, or press <span class="key">RANDOM</span>.</li>
     </ol>
-    <div class="note"><b>Why the MIDI OUT PORT?</b> Live doesn't pass MIDI that comes out of AU or VST3 plug-ins on to other tracks or to MIDI ports. TRoss Seq therefore sends straight to the port itself. Leave <b>HOST OUT</b> on or off as you like in Live; it has no effect there.</div>
+    <p><b>Software drum box (plug-in)</b></p>
+    <ol class="steps">
+      <li>Put TRoss Seq (VST3) on a MIDI track. Set MIDI OUT PORT to <b>NONE</b> and leave <b>HOST OUT</b> on.</li>
+      <li>Put the drum plug-in on a second MIDI track.</li>
+      <li>On that second track, set <b>MIDI From</b> to the TRoss Seq track, set the chooser below it to <b>TRoss Seq</b>, and set Monitor to <b>In</b>.</li>
+    </ol>
+    <p class="dim" style="font-size:8.5pt">Live merges all MIDI channels into one when it routes between tracks. That's fine for one drum plug-in; to play several plug-ins on different channels, use one TRoss Seq per plug-in.</p>
+    <p>To play or record from your keyboard, arm the TRoss Seq track (or set its monitor to <b>In</b>).</p>
+
+    <h3>Logic Pro</h3>
+    <p>Logic uses the <b>Audio Unit</b>. On a <b>Software Instrument</b> track, click the Instrument slot → <b>AU Instruments → Ticco Ross → TRoss Seq</b>. If it doesn't appear, open <b>Logic Pro → Settings → Plug-in Manager</b> and rescan it.</p>
+    <p><b>Hardware drum box:</b> under <b>MIDI OUT PORT</b>, pick your interface or drum box.</p>
+    <p><b>Software drum box (plug-in), Logic 11 or later</b></p>
+    <ol class="steps">
+      <li>On the TRoss Seq track, set MIDI OUT PORT to <b>NONE</b> and leave <b>HOST OUT</b> on.</li>
+      <li>Create a second Software Instrument track with the drum plug-in.</li>
+      <li>In that track's <b>Track Inspector</b>, set <b>Internal MIDI In</b> to <b>Instrument Output</b> and pick the TRoss Seq track as the source. Set <b>MIDI In Channel</b> to the lanes' channel (or All).</li>
+      <li>Turn on <b>Input Monitoring</b> on that track and press play.</li>
+    </ol>
+    <p class="dim" style="font-size:8.5pt">Logic 10 and earlier can't route MIDI out of an instrument plug-in. There, send TRoss Seq to a virtual MIDI port (section 6), keep the drum plug-in's track selected, and switch TRoss Seq's MIDI THRU off so the notes don't loop back into it.</p>
+
+    <h3>Bitwig Studio</h3>
+    <p>Bitwig uses the <b>VST3</b> (also on Linux). Drag <b>TRoss Seq</b> from the browser's plug-ins (Ticco Ross) onto an <b>Instrument track</b>.</p>
+    <p><b>Hardware drum box:</b> under <b>MIDI OUT PORT</b>, pick your interface or drum box.</p>
+    <p><b>Software drum box (plug-in)</b></p>
+    <ol class="steps">
+      <li>On the TRoss Seq track, set MIDI OUT PORT to <b>NONE</b> and leave <b>HOST OUT</b> on.</li>
+      <li>Create a second Instrument track with the drum plug-in.</li>
+      <li>In that track's input (the I/O section), pick the TRoss Seq track as its note source, and set the accepted channel to the lanes' channel (or all). Or add a <b>Note Receiver</b> device before the plug-in with the TRoss Seq track as its source.</li>
+      <li>If you hear nothing, arm the track or switch its monitoring on.</li>
+    </ol>
   </section>
 </section>
 
@@ -190,8 +228,8 @@
   <p>There are two outputs. Use one or both, but don't send both to the same drum box, or every note plays twice.</p>
   <table>
     <tr><th>Output</th><th>How it works</th><th>Use it in</th></tr>
-    <tr><td>MIDI OUT PORT</td><td>TRoss Seq sends straight to the port you pick: a MIDI interface, or a drum box with USB MIDI. It has its own high-priority timing, so notes don't jitter with the DAW's buffer.</td><td>Every DAW. The way to go in Ableton Live.</td></tr>
-    <tr><td>HOST OUT</td><td>The notes go to the DAW's MIDI output for the plug-in, and you route them from there.</td><td>DAWs that route plug-in MIDI: Bitwig, Reaper, Logic, Cubase, Studio One…</td></tr>
+    <tr><td>MIDI OUT PORT</td><td>TRoss Seq sends straight to the port you pick: a MIDI interface, or a drum box with USB MIDI. It has its own high-priority timing, so notes don't jitter with the DAW's buffer.</td><td>Every DAW. The way to go for hardware drum boxes.</td></tr>
+    <tr><td>HOST OUT</td><td>The notes go to the DAW's MIDI output for the plug-in, and you route them from there.</td><td>Software drum box plug-ins: Live (VST3 version), Logic 11 or later, Bitwig, Reaper, Cubase, Studio One… (section 3).</td></tr>
   </table>
 
   <h3>MIDI OUT PORT</h3>
@@ -243,15 +281,15 @@
   <div class="note"><b>Check your drum box.</b> The preset maps follow each maker's published default notes. If a sound doesn't trigger, look up its note in the drum box's manual or MIDI settings and fix that lane with LEARN or the NOTE read-out.</div>
 
   <h3>Playing a software drum box</h3>
-  <p><b>Standalone apps</b> (a software drum box running on its own, outside the DAW): pick the app's MIDI input under <b>MIDI OUT PORT</b> if it creates one, or send TRoss Seq to a virtual MIDI port (below) and set the app to listen to that port. TRoss Seq still follows your DAW's tempo.</p>
-  <p><b>Plug-ins in Live:</b> Live doesn't pass MIDI from one plug-in to another, so send TRoss Seq to a virtual MIDI port and play the plug-in from there. On a Mac:</p>
+  <p><b>Plug-ins</b> running in your DAW: see section 3 for Live, Logic and Bitwig.</p>
+  <p><b>Standalone apps</b> (a software drum box running on its own, outside the DAW): pick the app's MIDI input under <b>MIDI OUT PORT</b> if it creates one. If it doesn't, use a virtual MIDI port and set the app to listen to it. TRoss Seq still follows your DAW's tempo. To make a virtual port on a Mac:</p>
   <ol class="steps">
     <li>Open <b>Audio MIDI Setup</b> → Window → Show MIDI Studio, double-click <b>IAC Driver</b> and tick <b>Device is online</b>.</li>
-    <li>In TRoss Seq, set <b>MIDI OUT PORT</b> to <b>IAC Driver Bus 1</b> and pick the software's map in PRESETS (e.g. UVI Prime 8).</li>
-    <li>Put the software instrument on its own MIDI track, set that track's <b>MIDI From</b> to <b>IAC Driver (Bus 1)</b> and Monitor to <b>In</b>.</li>
-    <li>Make sure the software listens on the channel the lanes send on (CH), or on all channels.</li>
+    <li>In TRoss Seq, set <b>MIDI OUT PORT</b> to <b>IAC Driver Bus 1</b> and pick the software's map in PRESETS.</li>
+    <li>In the app, choose <b>IAC Driver Bus 1</b> as its MIDI input.</li>
+    <li>Make sure the app listens on the channel the lanes send on (CH), or on all channels.</li>
   </ol>
-  <p>In Live's Settings → Link, Tempo &amp; MIDI, switch <b>Track</b> on for the IAC Driver <i>input</i> only. On Windows, use a virtual MIDI port such as loopMIDI the same way.</p>
+  <p>On Windows, use a virtual MIDI port such as loopMIDI the same way. If your DAW also listens to that virtual port, switch it off as an input there, so the notes don't loop back into TRoss Seq.</p>
 
   <h3>Using several drum boxes</h3>
   <p>Give each drum box its own MIDI channel and set the lanes' CH to match: for example lanes 1–8 on channel 10 for one box, lanes 9–13 on channel 11 for another. Both boxes can sit on the same MIDI port (daisy-chained through MIDI THRU) or you can use two TRoss Seq instances with a port each.</p>
@@ -471,7 +509,7 @@
   <h2><span class="n">16</span>Troubleshooting</h2>
   <table>
     <tr><th>Problem</th><th>What to check</th></tr>
-    <tr><td>The drum box plays nothing</td><td>Is the song playing and RUN on? Does the MIDI OUT PORT status read CONNECTED? Do the lanes' CH match the channel the drum box listens on (often 10)? Are the notes right for your drum box (PRESETS, LEARN)? Is the lane muted? In Live, remember HOST OUT does nothing; use the port.</td></tr>
+    <tr><td>The drum box plays nothing</td><td>Is the song playing and RUN on? Does the MIDI OUT PORT status read CONNECTED? Do the lanes' CH match the channel the drum box listens on (often 10)? Are the notes right for your drum box (PRESETS, LEARN)? Is the lane muted? For a software plug-in, check the routing in section 3 for your DAW.</td></tr>
     <tr><td>Every note plays twice</td><td>Both outputs reach the same drum box. Turn HOST OUT off, or set MIDI OUT PORT to NONE.</td></tr>
     <tr><td>One sound doesn't trigger</td><td>That lane's note isn't what the drum box expects. Click LEARN on the lane and hit the pad on the drum box (if it sends MIDI), or look up the note in its manual.</td></tr>
     <tr><td>Port shows COULDN'T OPEN (Windows)</td><td>Most Windows MIDI drivers let only one program use a port. Switch that port off in your DAW's MIDI settings, close other MIDI apps, then pick it again in TRoss Seq.</td></tr>
@@ -479,10 +517,10 @@
     <tr><td>Drum box is early or late against the DAW</td><td>Adjust PORT DELAY until they line up.</td></tr>
     <tr><td>Drum box's tempo / effects don't follow</td><td>Switch CLOCK OUT on and set the drum box to sync to external MIDI clock.</td></tr>
     <tr><td>RANDOM doesn't change anything at once</td><td>While playing, the result waits for step 1; the display shows <span class="lcd">PAT 1 &gt; RND</span>. Check the lane isn't locked (padlock).</td></tr>
-    <tr><td>Keyboard doesn't play or record</td><td>In Live, arm the track or set monitor to In. MIDI THRU must be on to pass it to the drum box; REC must be on and the song playing to record.</td></tr>
+    <tr><td>Keyboard doesn't play or record</td><td>Arm the TRoss Seq track (in Live you can also set its monitor to In). MIDI THRU must be on to pass it to the drum box; REC must be on and the song playing to record.</td></tr>
     <tr><td>The pop-up tips get in the way</td><td>Switch <b>HELP</b> off (top right). Knob values still show while you turn them.</td></tr>
     <tr><td>A flam doesn't sound like a flam</td><td>Some drum boxes cut a sound short when it retriggers quickly, or ignore low velocities. Try a longer FLAM time, a higher FLAM LVL, or raise VELOCITY.</td></tr>
-    <tr><td>TRoss Seq doesn't appear in Live</td><td>Rescan plug-ins (Option-click Rescan on a Mac). Check Audio Units / VST3 are switched on in Settings → Plug-Ins. On a Mac, check the installer actually ran (Privacy &amp; Security → Open Anyway).</td></tr>
+    <tr><td>TRoss Seq doesn't appear in the DAW</td><td>Rescan plug-ins (Live: Settings → Plug-Ins, Option-click Rescan on a Mac; Logic: Plug-in Manager; Bitwig: Settings → Locations, rescan). In Live check Audio Units / VST3 are switched on. On a Mac, check the installer actually ran (Privacy &amp; Security → Open Anyway).</td></tr>
   </table>
 </section>
 
