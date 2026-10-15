@@ -304,13 +304,22 @@ void StepGrid::paint (juce::Graphics& g)
             g.fillRoundedRectangle (r, 3.0f);
 
             const auto c = r.getCentre();
-            if (on && proc.patterns.flam (slot, row, s))   // flam: a small grace LED, then the main one
+            if (on && proc.patterns.flam (slot, row, s))   // flam: small grace LEDs (1 flam, 2 drag, 3 ruff), then the main one
             {
-                const auto cg = c.translated (-4.5f, 0.0f), cm = c.translated (2.5f, 0.0f);
+                const auto fs = proc.patterns.flamStyle (slot, row, s);
+                const float step = 4.2f;
+                const auto cm = c.translated (fs.graces * step * 0.5f + 1.0f, 0.0f);
+                const float left = cm.x - 4.5f - fs.graces * step - 1.5f;
                 g.setColour (juce::Colour (0xff1a1a1a));
-                g.fillRoundedRectangle (juce::Rectangle<float> (cg.x - 4.0f, c.y - 5.5f, (cm.x + 5.5f) - (cg.x - 4.0f), 11.0f), 5.5f);
-                drawLed (g, cg, 5.0f, true, juce::Colour (0xffffb36a));
+                g.fillRoundedRectangle (juce::Rectangle<float> (left, c.y - 5.5f, (cm.x + 5.5f) - left, 11.0f), 5.5f);
+                for (int k = 0; k < fs.graces; ++k)
+                    drawLed (g, { cm.x - 5.5f - (fs.graces - 1 - k) * step - 0.5f, c.y }, 3.8f, true, juce::Colour (0xffffb36a));
                 drawLed (g, cm, 8.0f, true);
+                if (fs.spacing != 0 || fs.level != 0)   // its own spacing / level: a small mark under the pad's LEDs
+                {
+                    g.setColour (juce::Colour (0xff1a1a1a).withAlpha (0.55f));
+                    g.fillRect (left + 1.0f, r.getBottom() - 2.5f, (cm.x + 4.5f) - left - 1.0f, 1.2f);
+                }
             }
             else if (on)
             {
@@ -349,8 +358,14 @@ bool StepGrid::hit (juce::Point<float> p, int& row, int& step) const
 void StepGrid::mouseDown (const juce::MouseEvent& e)
 {
     int row, step;
-    if (! hit (e.position, row, step)) return;
     const int slot = proc.getCurrentSlot();
+    if (e.mods.isPopupMenu())
+    {
+        if (hit (e.position, row, step)) { showStepMenu (row, step); return; }
+        if (juce::Rectangle<float> ((float) kNameX, kPadTop, (float) kNameW, kPadH).contains (e.position)) showAccentMenu();   // ACCENT label
+        return;
+    }
+    if (! hit (e.position, row, step)) return;
     if (e.mods.isShiftDown() && row > 0)   // Shift-click: flam on (switching the step on if needed) / flam off
     {
         if (! proc.patterns.cell (slot, row, step))
@@ -368,6 +383,83 @@ void StepGrid::mouseDown (const juce::MouseEvent& e)
     dragRow = row; lastDragStep = step;
     proc.patterns.setCell (slot, row, step, dragValue);
     repaint();
+}
+
+// right-click on a pad: the step and its flam
+void StepGrid::showStepMenu (int row, int step)
+{
+    if (row == 0) { showAccentMenu(); return; }
+    auto& pm = proc.patterns;
+    const int slot = proc.getCurrentSlot();
+    const bool on = pm.cell (slot, row, step), fl = on && pm.flam (slot, row, step);
+    const auto fs = pm.flamStyle (slot, row, step);
+    const float knobMs = proc.apvts.getRawParameterValue ("flamtime")->load();
+    const float knobLevel = proc.apvts.getRawParameterValue ("flamlevel")->load();
+
+    juce::PopupMenu m;
+    m.addSectionHeader (proc.getTrackName (row - 1) + "  ·  step " + juce::String (step + 1));
+    m.addItem (1, on ? "Step off" : "Step on");
+    m.addSeparator();
+    m.addSectionHeader ("Flam  (Shift-click a pad: on / off)");
+    m.addItem (10, "No flam", true, ! fl);
+    m.addItem (11, "Flam  (1 grace note)", true, fl && fs.graces == 1);
+    m.addItem (12, "Drag  (2 grace notes)", true, fl && fs.graces == 2);
+    m.addItem (13, "Ruff  (3 grace notes)", true, fl && fs.graces == 3);
+    juce::PopupMenu sp, lv;
+    sp.addItem (20, "FLAM knob  (" + juce::String (knobMs, 0) + " ms)", true, fl && fs.spacing == 0);
+    for (int i = 1; i < FlamStyle::kNumSpacings; ++i)
+        sp.addItem (20 + i, juce::String (FlamStyle::kSpacingMs[i], 0) + " ms", true, fl && fs.spacing == i);
+    lv.addItem (30, "FLAM LEVEL knob  (" + juce::String (knobLevel, 0) + " %)", true, fl && fs.level == 0);
+    for (int i = 1; i < FlamStyle::kNumLevels; ++i)
+        lv.addItem (30 + i, juce::String (FlamStyle::kLevelPct[i], 0) + " %", true, fl && fs.level == i);
+    m.addSubMenu ("Spacing", sp);
+    m.addSubMenu ("Grace level", lv);
+    m.addSeparator();
+    m.addItem (40, "Use this flam on every hit in this lane", fl);
+    m.addItem (41, "Remove all flams in this lane", pm.getFlams (slot, row) != 0);
+
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this).withTargetScreenArea (
+                         localAreaToGlobal (padRect (row, step).toNearestInt())),
+                     [safe = juce::Component::SafePointer<StepGrid> (this), row, step, slot] (int id)
+                     {
+                         if (safe == nullptr || id <= 0) return;
+                         auto& p = safe->proc;
+                         auto& pm = p.patterns;
+                         auto style = pm.flamStyle (slot, row, step);
+                         auto ensureFlam = [&]
+                         {
+                             if (! pm.cell (slot, row, step)) pm.setCell (slot, row, step, true);
+                             if (! pm.flam (slot, row, step)) { pm.setFlam (slot, row, step, true); style = FlamStyle(); }
+                         };
+                         if (id == 1)  pm.setCell (slot, row, step, ! pm.cell (slot, row, step));
+                         if (id == 10) pm.setFlam (slot, row, step, false);
+                         if (id >= 11 && id <= 13) { ensureFlam(); style.graces = id - 10; pm.setFlamStyle (slot, row, step, style.encode()); }
+                         if (id >= 20 && id < 20 + FlamStyle::kNumSpacings) { ensureFlam(); style.spacing = id - 20; pm.setFlamStyle (slot, row, step, style.encode()); }
+                         if (id >= 30 && id < 30 + FlamStyle::kNumLevels) { ensureFlam(); style.level = id - 30; pm.setFlamStyle (slot, row, step, style.encode()); }
+                         if (id == 40) p.flamWholeRow (row, pm.getFlamStyle (slot, row, step));
+                         if (id == 41) p.clearRowFlams (row, false);
+                         safe->repaint();
+                     });
+}
+
+// right-click on the ACCENT label (or an accent pad)
+void StepGrid::showAccentMenu()
+{
+    const int slot = proc.getCurrentSlot();
+    bool anyAll = false;
+    for (int sl = 0; sl < kNumSlots; ++sl) anyAll |= proc.patterns.get (sl, 0) != 0;
+    juce::PopupMenu m;
+    m.addSectionHeader ("ACCENT row");
+    m.addItem (1, "Clear the accent row", proc.patterns.get (slot, 0) != 0);
+    m.addItem (2, "Clear the accent row in all 12 patterns", anyAll);
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+                     [safe = juce::Component::SafePointer<StepGrid> (this)] (int id)
+                     {
+                         if (safe == nullptr) return;
+                         if (id == 1) safe->proc.clearRow (0, false);
+                         if (id == 2) safe->proc.clearRow (0, true);
+                         safe->repaint();
+                     });
 }
 
 void StepGrid::mouseDrag (const juce::MouseEvent& e)
@@ -396,11 +488,11 @@ NameStrip::NameStrip (TrossSeqProcessor& p, int t) : proc (p), track (t)
 void NameStrip::paint (juce::Graphics& g)
 {
     const auto r = getLocalBounds().toFloat();
+    // lights up only when you click it (not when the lane plays)
     const auto now = juce::Time::getMillisecondCounter();
-    const auto last = proc.lastSent[track].load();
-    const float t = juce::jlimit (0.0f, 1.0f, (float) (now - last) / 160.0f);
-    const auto flash = clickTime == last && lastAccent ? juce::Colour (0xffffffff) : col::orange;
-    const auto bg = last != 0 && t < 1.0f ? flash.interpolatedWith (col::stripBg, t) : col::stripBg;
+    const float t = juce::jlimit (0.0f, 1.0f, (float) (now - clickTime) / 160.0f);
+    const auto flash = lastAccent ? juce::Colour (0xffffffff) : col::orange;
+    const auto bg = clickTime != 0 && t < 1.0f ? flash.interpolatedWith (col::stripBg, t) : col::stripBg;
     g.setColour (bg);
     g.fillRoundedRectangle (r, 2.0f);
     const int solo = proc.momentarySolo.load();
@@ -432,8 +524,17 @@ void NameStrip::mouseDown (const juce::MouseEvent& e)
         juce::PopupMenu m;
         m.addSectionHeader ("Track " + juce::String (track + 1) + ": note " + juce::String (proc.map.note (track))
                             + " (" + noteName (proc.map.note (track)) + "), channel " + juce::String (proc.map.channel (track)));
-        m.addItem (1, "Rename...");
+        const int row = track + 1, slot = proc.getCurrentSlot();
+        const bool hasSteps = proc.patterns.get (slot, row) != 0, hasFlams = proc.patterns.getFlams (slot, row) != 0;
+        bool anyAll = false, anyFlamsAll = false;
+        for (int sl = 0; sl < kNumSlots; ++sl) { anyAll |= proc.patterns.get (sl, row) != 0; anyFlamsAll |= proc.patterns.getFlams (sl, row) != 0; }
+        m.addItem (1, "Rename...  (Shift-click)");
         m.addItem (2, "Learn note from MIDI input");
+        m.addSeparator();
+        m.addItem (10, "Clear this lane", hasSteps);
+        m.addItem (11, "Clear this lane's flams", hasFlams);
+        m.addItem (12, "Clear this lane in all 12 patterns", anyAll);
+        m.addItem (13, "Clear this lane's flams in all 12 patterns", anyFlamsAll);
         m.addSeparator();
         m.addItem (3, "Randomise this lane");
         m.addItem (4, "Lock from the randomiser  (Alt-click)", true, proc.locked[track].load());
@@ -445,16 +546,19 @@ void NameStrip::mouseDown (const juce::MouseEvent& e)
                              if (id == 2) safe->proc.learnTrack = safe->track;
                              if (id == 3) safe->proc.randomise (TrossSeqProcessor::RandomOp::Lane, safe->track);
                              if (id == 4) safe->proc.toggleLock (safe->track);
+                             if (id == 10) safe->proc.clearRow (safe->track + 1, false);
+                             if (id == 11) safe->proc.clearRowFlams (safe->track + 1, false);
+                             if (id == 12) safe->proc.clearRow (safe->track + 1, true);
+                             if (id == 13) safe->proc.clearRowFlams (safe->track + 1, true);
                              safe->repaint();
                          });
         return;
     }
-    if (e.mods.isAltDown()) { proc.toggleLock (track); repaint(); return; }
-    if (e.getNumberOfClicks() > 1) { startRename(); return; }
-    lastAccent = e.mods.isShiftDown();
+    if (e.mods.isAltDown())   { proc.toggleLock (track); repaint(); return; }
+    if (e.mods.isShiftDown()) { startRename(); return; }
+    lastAccent = e.mods.isCommandDown();   // Cmd-click (Mac) / Ctrl-click (Windows): accented hit
     proc.panelHit (track, lastAccent);
     clickTime = juce::Time::getMillisecondCounter();
-    proc.lastSent[track] = clickTime;
     repaint();
 }
 
@@ -495,6 +599,7 @@ static MidiExport::Settings exportSettings (TrossSeqProcessor& proc)
     s.gate = v ("gate") / 100.0f;
     s.swing = v ("swing");
     s.flamMs = v ("flamtime");
+    s.flamLevel = v ("flamlevel");
     return s;
 }
 
@@ -718,14 +823,15 @@ TrossSeqEditor::TrossSeqEditor (TrossSeqProcessor& p)
     content.setBounds (0, 0, kWidth, kHeight);
 
     // ---- silver top: feel, MIDI out, drum map
-    addKnob ("velocity", { 46, 94 }, 34);
-    addKnob ("accvel",   { 102, 94 }, 34);
-    addKnob ("gate",     { 158, 94 }, 34);
-    addKnob ("swing",    { 214, 94 }, 34);
-    addKnob ("flamtime", { 270, 94 }, 34).setTooltip ("Flam: how far before the step the grace note plays. Shift-click a pad to add or remove a flam");
+    addKnob ("velocity",  { 42, 94 }, 32);
+    addKnob ("accvel",    { 92, 94 }, 32);
+    addKnob ("gate",      { 142, 94 }, 32);
+    addKnob ("swing",     { 192, 94 }, 32);
+    addKnob ("flamtime",  { 242, 94 }, 32).setTooltip ("Flam spacing: how far before the step the grace notes start. Shift-click a pad for a flam, right-click it for more");
+    addKnob ("flamlevel", { 292, 94 }, 32).setTooltip ("Flam level: how loud the grace notes are, as % of the step's velocity");
 
     content.addAndMakeVisible (portBox);
-    portBox.setBounds (326, 76, 226, 22);
+    portBox.setBounds (342, 76, 210, 22);
     auto toggle = [this] (const char* id, const char* text, int y, const char* tip)
     {
         auto& b = addButton (id, text, { 566, y, 84, 15 }, "rubber");
@@ -778,7 +884,7 @@ TrossSeqEditor::TrossSeqEditor (TrossSeqProcessor& p)
         const int y = rowY (t + 1);
         auto strip = std::make_unique<NameStrip> (proc, t);
         strip->setBounds (kNameX, y, kNameW, (int) kPadH);
-        strip->setTooltip ("Click to play. Shift-click for an accent. Double-click to rename, right-click for more. "
+        strip->setTooltip ("Click to play (Cmd/Ctrl-click: accent). Shift-click to rename, Alt-click to lock, right-click to clear and more. "
                            "Records into the pattern while REC is on and the song plays.");
         content.addAndMakeVisible (*strip);
         strips.push_back (std::move (strip));
@@ -857,7 +963,7 @@ TrossSeqEditor::TrossSeqEditor (TrossSeqProcessor& p)
     };
     key (fillBtn, { 996, kRndY + 72, 50, 24 }, "Random fill on the last four steps");
     fillBtn.onClick = [this] { proc.randomise (TrossSeqProcessor::RandomOp::Fill); grid.repaint(); lcd.repaint(); };
-    key (undoBtn, { 1052, kRndY + 72, 52, 24 }, "Back to the pattern before the last RANDOM / FILL");
+    key (undoBtn, { 1052, kRndY + 72, 52, 24 }, "Back to the pattern before the last RANDOM, FILL, CLEAR or lane clear");
     undoBtn.onClick = [this] { proc.undoRandom(); grid.repaint(); lcd.repaint(); };
 
     if (proc.isStandalone())   // no host transport: own play button + tempo
@@ -1135,24 +1241,25 @@ void TrossSeqEditor::paintPanel (juce::Graphics& g)
         g.fillRect (x + 1, 60, 1, 56);
     };
 
-    label ("VELOCITY", 16, 61, 60);
-    label ("ACCENT", 72, 61, 60);
-    label ("GATE", 128, 61, 60);
-    label ("SWING", 184, 61, 60);
-    label ("FLAM", 240, 61, 60);
-    divider (308);
+    label ("VELOCITY", 12, 61, 60);
+    label ("ACCENT", 62, 61, 60);
+    label ("GATE", 112, 61, 60);
+    label ("SWING", 162, 61, 60);
+    label ("FLAM", 212, 61, 60);
+    label ("FLAM LVL", 262, 61, 60);
+    divider (324);
 
-    label ("MIDI OUT PORT", 326, 61, 226, juce::Justification::centredLeft);
+    label ("MIDI OUT PORT", 342, 61, 210, juce::Justification::centredLeft);
     {
         juce::String status;
         auto c = col::softText;
         if (proc.directOut.isOpen())                 { status = "CONNECTED"; c = col::okGreen; }
         else if (proc.getPortError().isNotEmpty())   { status = proc.getPortError().toUpperCase(); c = col::orange; }
-        else if (proc.getPortName().isNotEmpty())    { status = "NOT CONNECTED: PLUG IN OR PICK ANOTHER"; c = col::orange; }
+        else if (proc.getPortName().isNotEmpty())    { status = "NOT CONNECTED: PLUG IN / PICK ANOTHER"; c = col::orange; }
         else                                         status = "NONE: ONLY THE HOST'S MIDI OUT";
         g.setColour (c);
         g.setFont (font (8.0f, true, 0.08f));
-        g.drawText (status, 326, 103, 232, 12, juce::Justification::centredLeft);
+        g.drawText (status, 342, 103, 220, 12, juce::Justification::centredLeft);
     }
     label ("PORT DELAY", 660, 61, 60);
     divider (726);
@@ -1251,7 +1358,7 @@ void TrossSeqEditor::timerCallback()
     const int nv = proc.getNameVersion(), solo = proc.momentarySolo.load();
     const auto now = juce::Time::getMillisecondCounter();
     for (int t = 0; t < kNumTracks; ++t)
-        if (nv != lastNameVersion || solo != lastSolo || now - proc.lastSent[t].load() < 240) strips[(size_t) t]->repaint();
+        if (nv != lastNameVersion || solo != lastSolo || now - strips[(size_t) t]->clickTime < 240) strips[(size_t) t]->repaint();
     lastNameVersion = nv; lastSolo = solo;
 
     // randomiser: RANDOM blinks while a result waits for step 1; UNDO only when there's something to undo

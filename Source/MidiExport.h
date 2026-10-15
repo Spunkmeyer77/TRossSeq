@@ -17,7 +17,8 @@ struct MidiExport
         int velocity = 100, accentVelocity = 127;
         float gate = 0.5f;     // fraction of a step
         float swing = 50.0f;   // %
-        float flamMs = 25.0f;  // grace note this long before a flammed step
+        float flamMs = 25.0f;     // FLAM knob: grace notes this long before a flammed step
+        float flamLevel = 60.0f;  // FLAM LEVEL knob: grace velocity, % of the step's
     };
 
     // One track: the given slots one after another, each `length` steps long.
@@ -31,7 +32,7 @@ struct MidiExport
         meta (juce::MidiMessage::timeSignatureMetaEvent (4, 4));
 
         const double sw = StepClock::swingFromPercent (s.swing);
-        const int flamTicks = juce::jlimit (1, kTicksPerStep / 2, juce::roundToInt (s.flamMs / 1000.0 * s.bpm / 60.0 * kTicksPerQuarter));
+        auto msToTicks = [&] (float ms) { return juce::jlimit (1, kTicksPerStep / 2, juce::roundToInt (ms / 1000.0 * s.bpm / 60.0 * kTicksPerQuarter)); };
         const int gateTicks = juce::jlimit (1, kTicksPerStep - 1, juce::roundToInt (s.gate * kTicksPerStep));
         int start = 0;
         for (int slot : slots)
@@ -44,11 +45,18 @@ struct MidiExport
                     if (p.cell (slot, tr + 1, st))
                     {
                         const int vel = juce::jlimit (1, 127, accent ? s.accentVelocity : s.velocity);
-                        if (p.flam (slot, tr + 1, st))   // grace note just before, softer
+                        if (p.flam (slot, tr + 1, st))   // grace notes just before, softer (flam 1, drag 2, ruff 3)
                         {
-                            const int g = juce::jmax (0, t - flamTicks);
-                            seq.addEvent (juce::MidiMessage::noteOn (map.channel (tr), map.note (tr), (juce::uint8) juce::jmax (1, juce::roundToInt (vel * 0.6f))), g);
-                            seq.addEvent (juce::MidiMessage::noteOff (map.channel (tr), map.note (tr)), g + juce::jmax (1, flamTicks * 3 / 4));
+                            const auto fs = p.flamStyle (slot, tr + 1, st);
+                            const int span = msToTicks (fs.spacingMs (s.flamMs));
+                            const int gap = juce::jmax (1, span / fs.graces);
+                            const auto gv = (juce::uint8) juce::jlimit (1, 127, juce::roundToInt (vel * fs.levelPct (s.flamLevel) / 100.0f));
+                            for (int k = 0; k < fs.graces; ++k)
+                            {
+                                const int g = juce::jmax (0, t - (span - k * gap));
+                                seq.addEvent (juce::MidiMessage::noteOn (map.channel (tr), map.note (tr), gv), g);
+                                seq.addEvent (juce::MidiMessage::noteOff (map.channel (tr), map.note (tr)), g + juce::jmax (1, gap * 3 / 4));
+                            }
                         }
                         seq.addEvent (juce::MidiMessage::noteOn (map.channel (tr), map.note (tr), (juce::uint8) vel), t);
                         seq.addEvent (juce::MidiMessage::noteOff (map.channel (tr), map.note (tr)), t + gateTicks);

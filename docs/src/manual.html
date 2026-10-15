@@ -84,7 +84,7 @@
     <div class="sub">16-STEP MIDI DRUM SEQUENCER &nbsp;·&nbsp; USER MANUAL</div>
   </div>
   <div class="shot"><img src="panel.png" alt="TRoss Seq panel"></div>
-  <div class="meta"><span><b>Version 0.5.0</b> &nbsp;·&nbsp; AU / VST3</span><span>Ticco Ross · 2026</span></div>
+  <div class="meta"><span><b>Version 0.6.0</b> &nbsp;·&nbsp; AU / VST3</span><span>Ticco Ross · 2026</span></div>
 </div>
 
 <!-- ============================================================ contents -->
@@ -118,7 +118,7 @@
       <li><b>12 pattern slots</b>. A new slot always waits for the current pattern to finish, so changes land on the bar.</li>
       <li><b>A drum-aware randomiser</b> that writes patterns the way each drum is usually played, with styles, density, lane locks, variations, fills and undo.</li>
       <li><b>Two ways out</b>: straight to a MIDI port on your computer, or to your DAW's MIDI routing.</li>
-      <li><b>Flams</b> on any step with <span class="mod">Shift</span>-click, and a <b>drum map library</b> to keep one map per drum box.</li>
+      <li><b>Flams, drags and ruffs</b> on any step (<span class="mod">Shift</span>-click, right-click to edit), and a <b>drum map library</b> to keep one map per drum box.</li>
       <li>Swing, gate, accent velocity, MIDI clock out, MIDI learn, keyboard recording and MIDI file export.</li>
     </ul>
     <p>TRoss Seq makes no sound of its own. It is an instrument plug-in that outputs MIDI, which is why it loads on a MIDI or instrument track.</p>
@@ -130,7 +130,7 @@
   <h2><span class="n">2</span>Installing</h2>
   <h3>macOS</h3>
   <ol class="steps">
-    <li>Open <b>TRossSeq-0.5.0-macOS.pkg</b> (the manual is in the same download).</li>
+    <li>Open <b>TRossSeq-0.6.0-macOS.pkg</b> (the manual is in the same download).</li>
     <li>The installer isn't signed, so the first time macOS blocks it. Open <b>System Settings → Privacy &amp; Security</b>, scroll down and click <b>Open Anyway</b>, then open the .pkg again.</li>
     <li>Follow the installer. It puts the Audio Unit in <code>/Library/Audio/Plug-Ins/Components</code> and the VST3 in <code>/Library/Audio/Plug-Ins/VST3</code>. Click <b>Customize</b> to install only one of them.</li>
     <li>In Ableton Live, open <b>Settings → Plug-Ins</b>, check that Audio Units (and/or VST3) are switched on, then hold <span class="mod">Option</span> and click <b>Rescan</b>.</li>
@@ -138,7 +138,7 @@
   <p>You'll find it in Live's browser under <b>Plug-Ins → Audio Units → Ticco Ross → TRoss Seq</b> (or under VST3).</p>
 
   <h3>Windows</h3>
-  <p>Run <b>TRossSeq-0.5.0-Windows-Setup.exe</b>. If SmartScreen appears, click <b>More info → Run anyway</b>. The VST3 goes to <code>C:\Program Files\Common Files\VST3</code>. Rescan plug-ins in your DAW.</p>
+  <p>Run <b>TRossSeq-0.6.0-Windows-Setup.exe</b>. If SmartScreen appears, click <b>More info → Run anyway</b>. The VST3 goes to <code>C:\Program Files\Common Files\VST3</code>. Rescan plug-ins in your DAW.</p>
 
   <h3>Linux</h3>
   <p>Unpack the <code>.tar.gz</code> and run <code>./install.sh</code>. It copies the VST3 to <code>~/.vst3</code> and the LV2 to <code>~/.lv2</code>, with no root needed. <code>./uninstall.sh</code> removes them.</p>
@@ -163,9 +163,9 @@
 <!-- ============================================================ panel -->
 <section>
   <h2><span class="n">4</span>The panel at a glance</h2>
-  <figure><img src="panel.png" alt="TRoss Seq panel"><figcaption>TRoss Seq 0.5.0. The window can be resized from its bottom-right corner.</figcaption></figure>
+  <figure><img src="panel.png" alt="TRoss Seq panel"><figcaption>TRoss Seq 0.6.0. The window can be resized from its bottom-right corner.</figcaption></figure>
   <div class="areas">
-    <div class="area"><h4><span>A</span>Feel</h4><p>VELOCITY, ACCENT, GATE, SWING and FLAM knobs (section 11). Turn a knob to see its value; double-click resets it.</p></div>
+    <div class="area"><h4><span>A</span>Feel</h4><p>VELOCITY, ACCENT, GATE, SWING, FLAM and FLAM LVL knobs (section 11). Turn a knob to see its value; double-click resets it.</p></div>
     <div class="area"><h4><span>B</span>MIDI output</h4><p>MIDI OUT PORT selector and status line, HOST OUT, CLOCK OUT, MIDI THRU and PORT DELAY (section 5).</p></div>
     <div class="area"><h4><span>C</span>Drum map</h4><p>PRESETS: built-in maps and your own saved maps. The line below shows the current map, with <b>* EDITED</b> when it has changed (section 6).</p></div>
     <div class="area"><h4><span>D</span>Display</h4><p>Shows the playing pattern and what's queued next. In a DAW TRoss Seq follows the host's transport and tempo.</p></div>
@@ -219,12 +219,12 @@
   <p>Each of the 13 lanes has a name strip on the left and its MIDI settings on the right.</p>
   <table>
     <tr><th>Control</th><th>What it does</th></tr>
-    <tr><td>Name strip</td><td><b>Click</b> to play the lane's note now. <span class="mod">Shift</span>-click plays it at accent velocity. It lights up every time the lane sends a note.</td></tr>
-    <tr><td>Rename</td><td><b>Double-click</b> the name and type up to 10 characters; <span class="mod">Return</span> keeps it, <span class="mod">Esc</span> cancels. The name also tells the randomiser what kind of drum the lane is (section 12).</td></tr>
+    <tr><td>Name strip</td><td><b>Click</b> to play the lane's note now; the strip flashes for your click. <span class="mod">Cmd</span>-click (Mac) or <span class="mod">Ctrl</span>-click (Windows) plays it at accent velocity. The strip doesn't flash when the sequencer plays the lane.</td></tr>
+    <tr><td>Rename</td><td><span class="mod">Shift</span>-click the name and type up to 10 characters; <span class="mod">Return</span> keeps it, <span class="mod">Esc</span> cancels. The name also tells the randomiser what kind of drum the lane is (section 12).</td></tr>
     <tr><td>NOTE</td><td>The MIDI note the lane sends. Drag the red read-out up or down. Note names follow Ableton's convention (C1 = 36).</td></tr>
     <tr><td>CH</td><td>The MIDI channel, 1–16. Drag up or down.</td></tr>
     <tr><td><span class="key">LEARN</span></td><td>Click it (it blinks), then hit a key or pad: the lane takes that note and channel.</td></tr>
-    <tr><td>Right-click a name</td><td>Rename, Learn, Randomise this lane, Lock from the randomiser.</td></tr>
+    <tr><td>Right-click a name</td><td>Rename, Learn, the clear options (section 8), Randomise this lane, Lock from the randomiser.</td></tr>
   </table>
 
   <h3>Drum maps and the PRESETS menu</h3>
@@ -274,19 +274,41 @@
     <li>The pads are coloured in groups of four, so the beats are easy to see. The LEDs above follow the playing step, and the playing column gets a white outline.</li>
     <li><b>ACCENT row:</b> on any step where it's lit, every lane plays at the ACCENT velocity instead of the VELOCITY.</li>
   </ul>
-  <h3>Flams</h3>
-  <p>A flam is a quick, softer grace note just before the main hit, like a drummer's two sticks landing almost together.</p>
+  <h3>Flams, drags and ruffs</h3>
+  <p>A flam is a quick, softer grace note just before the main hit, like a drummer's two sticks landing almost together. A <b>drag</b> has two grace notes and a <b>ruff</b> three.</p>
   <ul>
-    <li><span class="mod">Shift</span>-click a pad to add a flam. If the step was off, it switches on with the flam. The pad shows a small extra LED before the main one.</li>
-    <li><span class="mod">Shift</span>-click it again to remove the flam; the step stays on. A plain click switches the step off, flam included.</li>
-    <li>The grace note plays <b>before</b> the step, at 60 % of the step's velocity, so the main hit stays exactly on the grid. The <b>FLAM</b> knob sets how far before (section 11).</li>
-    <li>Flams work on every lane except ACCENT, are saved with the project and are included in EXPORT MIDI. Flams are only ever set by you: the randomiser never adds them (section 12).</li>
+    <li><span class="mod">Shift</span>-click a pad to add a flam. If the step was off, it switches on with the flam. <span class="mod">Shift</span>-click again to remove it; the step stays on. A plain click switches the step off, flam included.</li>
+    <li>Grace notes play <b>before</b> the step, so the main hit stays exactly on the grid. The pad shows one small LED per grace note in front of the main one. A thin line under the LEDs means the step has its own spacing or level.</li>
+    <li>The <b>FLAM</b> knob sets how far before the step the grace notes start, and <b>FLAM LVL</b> how loud they are (section 11). Every flam follows these knobs unless you give it its own settings.</li>
   </ul>
+  <p><b>Right-click a pad</b> to edit its flam:</p>
+  <table>
+    <tr><th>Menu item</th><th>What it does</th></tr>
+    <tr><td>Step on / off</td><td>Switches the step.</td></tr>
+    <tr><td>No flam · Flam · Drag · Ruff</td><td>How many grace notes: none, 1, 2 or 3. Picking one on an empty or plain step adds it.</td></tr>
+    <tr><td>Spacing</td><td><b>FLAM knob</b>, or a fixed 12, 25, 40 or 60 ms for this step. The grace notes of a drag or ruff are spread evenly over that time.</td></tr>
+    <tr><td>Grace level</td><td><b>FLAM LEVEL knob</b>, or a fixed 30, 50, 75 or 100 % of the step's velocity for this step.</td></tr>
+    <tr><td>Use this flam on every hit in this lane</td><td>Copies this step's flam type, spacing and level to every step of the lane in the playing pattern.</td></tr>
+    <tr><td>Remove all flams in this lane</td><td>Removes the lane's flams in the playing pattern; the steps stay.</td></tr>
+  </table>
+  <p>Flams work on every lane except ACCENT, are saved with the project, can be undone with UNDO (whole-lane changes) and are included in EXPORT MIDI. Flams are only ever set by you: the randomiser never adds them (section 12). Removing a flam forgets its settings, so adding it again starts as a plain flam.</p>
+
+  <h3>Clearing</h3>
+  <table>
+    <tr><th>Where</th><th>What it clears</th></tr>
+    <tr><td><span class="key">CLEAR</span></td><td>The whole playing pattern, accent row included.</td></tr>
+    <tr><td>Right-click a name → Clear this lane</td><td>That lane's steps (and flams) in the playing pattern.</td></tr>
+    <tr><td>Right-click a name → Clear this lane's flams</td><td>Only the flams; the steps stay.</td></tr>
+    <tr><td>… in all 12 patterns</td><td>The same, in every pattern slot at once.</td></tr>
+    <tr><td>Right-click the ACCENT label</td><td>Clear the accent row, in the playing pattern or in all 12.</td></tr>
+    <tr><td>Drag along a lane</td><td>Starting on a lit pad switches the steps you drag over off.</td></tr>
+  </table>
+  <p>Every clear can be taken back with <span class="key">UNDO</span>, and one UNDO restores a lane cleared in all 12 patterns.</p>
   <table>
     <tr><th>Control</th><th>What it does</th></tr>
     <tr><td>LENGTH</td><td>Pattern length, 1–16 steps. Drag the red read-out up or down; double-click for 16. Steps past the length are dimmed and don't play. Use odd lengths for patterns that drift against the bar.</td></tr>
     <tr><td><span class="key">RUN</span></td><td>Sequencer on/off. With RUN off, the steps still advance but send nothing; MIDI THRU and the name strips keep working.</td></tr>
-    <tr><td><span class="key">CLEAR</span></td><td>Clears the pattern that's playing, accent row included. (RANDOM's UNDO doesn't bring a cleared pattern back.)</td></tr>
+    <tr><td><span class="key">CLEAR</span></td><td>Clears the pattern that's playing, accent row included. UNDO brings it back.</td></tr>
   </table>
   <p>TRoss Seq always follows the DAW: it starts, stops, loops and jumps with the transport, and step 1 falls on the downbeat of each bar. When the transport stops, any note still held gets its note-off.</p>
 
@@ -296,7 +318,7 @@
     <ul>
       <li>A note matches a lane by <b>note and channel</b> first, then by <b>note alone</b>, so a keyboard on channel 1 still records into lanes that send on channel 10.</li>
       <li>Velocity above 100 also sets the accent on that step.</li>
-      <li>Clicking a name strip while playing records too (<span class="mod">Shift</span>-click for an accent).</li>
+      <li>Clicking a name strip while playing records too (<span class="mod">Cmd</span> / <span class="mod">Ctrl</span>-click for an accent).</li>
       <li>While the transport is stopped, nothing is recorded; hits just play.</li>
     </ul>
     <p>Switch REC off to play along without writing anything.</p>
@@ -318,10 +340,11 @@
     <table>
       <tr><th>Knob</th><th>Range</th><th>What it does</th></tr>
       <tr><td>VELOCITY</td><td>1–127</td><td>Velocity of normal steps. Default 100.</td></tr>
-      <tr><td>ACCENT</td><td>1–127</td><td>Velocity of steps with the ACCENT row lit, and of <span class="mod">Shift</span>-clicked name strips. Default 127.</td></tr>
+      <tr><td>ACCENT</td><td>1–127</td><td>Velocity of steps with the ACCENT row lit, and of <span class="mod">Cmd</span> / <span class="mod">Ctrl</span>-clicked name strips. Default 127.</td></tr>
       <tr><td>GATE</td><td>5–95 %</td><td>How long each note is held, as a fraction of a 16th note. Most drum boxes only care about the note-on; longer gates matter for sounds that respond to note length.</td></tr>
       <tr><td>SWING</td><td>50–75 %</td><td>50 % is straight. Higher values push every second 16th (steps 2, 4, 6…) later: 54–58 % is a light shuffle, 66.7 % a triplet feel, 75 % the maximum.</td></tr>
-      <tr><td>FLAM</td><td>5–80 ms</td><td>How far before a flammed step its grace note plays. Default 25 ms; 10–20 ms is tight, 40 ms and up sounds like two separate hits. Never more than half a step.</td></tr>
+      <tr><td>FLAM</td><td>5–80 ms</td><td>How far before a flammed step its grace notes start. Default 25 ms; 10–20 ms is tight, 40 ms and up sounds like separate hits. Never more than half a step. Steps with their own spacing (right-click a pad) ignore it.</td></tr>
+      <tr><td>FLAM LVL</td><td>10–100 %</td><td>How loud grace notes are, as a percentage of the step's velocity. Default 60 %. Steps with their own grace level ignore it.</td></tr>
     </table>
   </section>
 </section>
@@ -335,7 +358,7 @@
     <tr><td><span class="key">RANDOM</span></td><td>Writes a <b>whole new pattern</b> into the playing slot. Every unlocked lane is rewritten over the current LENGTH. <b>The ACCENT row is never changed.</b></td></tr>
     <tr><td><span class="mod">Shift</span>-click <span class="key">RANDOM</span></td><td>A <b>variation</b>: only a few steps of a few lanes change, and the anchors (kick on step 1, the backbeat) stay. Good for keeping a groove alive without losing it.</td></tr>
     <tr><td><span class="key">FILL</span></td><td>Rewrites only the <b>last four steps</b> of the pattern with a fill: toms, snare, hats and percussion. Press it before the bar you want the fill in.</td></tr>
-    <tr><td><span class="key">UNDO</span></td><td>Goes back to the pattern as it was before the last RANDOM, variation, fill or lane randomise; up to 32 steps back. Greyed out when there's nothing to undo.</td></tr>
+    <tr><td><span class="key">UNDO</span></td><td>Goes back to the pattern as it was before the last RANDOM, variation, fill, lane randomise, CLEAR, lane clear or whole-lane flam change; up to 32 steps back. Greyed out when there's nothing to undo.</td></tr>
     <tr><td>DENSITY</td><td>How busy random patterns are. 50 % follows the style as designed; lower is sparser, higher is busier. The anchors (kick on 1, the backbeat in STRAIGHT) are kept at any density.</td></tr>
     <tr><td>RANDOM STYLE</td><td>The character of what RANDOM and the variation write (below).</td></tr>
     <tr><td><span class="mod">Alt</span>-click a name<br><span class="dim" style="font-weight:400">(<span class="mod">Option</span>-click on a Mac)</span></td><td><b>Locks</b> the lane: a padlock appears and RANDOM, the variation and FILL leave it alone. Alt-click again to unlock. Locks are saved with the project.</td></tr>
@@ -391,7 +414,7 @@
     <li><b>All patterns as separate files</b> saves one file per non-empty slot into a folder you choose.</li>
   </ul>
   <p><b>Drag</b> the EXPORT MIDI key onto a MIDI track in your DAW to drop the playing pattern in as a clip.</p>
-  <p>Exported files use each lane's note and channel, the current VELOCITY, ACCENT, GATE, SWING, FLAM, LENGTH and the song tempo, with 16th-note steps. Flams are written as a grace note before the step.</p>
+  <p>Exported files use each lane's note and channel, the current VELOCITY, ACCENT, GATE, SWING, FLAM, LENGTH and the song tempo, with 16th-note steps. Flams, drags and ruffs are written as grace notes before the step.</p>
 
   <section class="flow">
     <h2><span class="n">14</span>Saving and defaults</h2>
@@ -419,10 +442,12 @@
     <tr><th>Where</th><th>Action</th></tr>
     <tr><td>Step pad</td><td>Click: on/off · Drag: paint</td></tr>
     <tr><td></td><td>Shift-click: flam on / off</td></tr>
-    <tr><td>Name strip</td><td>Click: play · Shift: accent</td></tr>
-    <tr><td></td><td>Double-click: rename</td></tr>
+    <tr><td></td><td>Right-click: flam type / spacing / level</td></tr>
+    <tr><td>Name strip</td><td>Click: play · Cmd/Ctrl: accent</td></tr>
+    <tr><td></td><td>Shift-click: rename</td></tr>
     <tr><td></td><td>Alt / Option-click: lock</td></tr>
-    <tr><td></td><td>Right-click: menu</td></tr>
+    <tr><td></td><td>Right-click: clear lane, learn…</td></tr>
+    <tr><td>ACCENT label</td><td>Right-click: clear accent row</td></tr>
     <tr><td>M</td><td>Click: mute · Shift + hold: solo</td></tr>
   </table>
   <table>
@@ -437,7 +462,7 @@
   </div>
 
   <h3>Automatable parameters</h3>
-  <p>Run · Length · Pattern · Record · Velocity · Accent Velocity · Gate · Swing · Flam Time · Port Delay · MIDI Thru · Host Out · Clock Out · Random Density · Random Style · Track 1–13 Mute</p>
+  <p>Run · Length · Pattern · Record · Velocity · Accent Velocity · Gate · Swing · Flam Time · Flam Level · Port Delay · MIDI Thru · Host Out · Clock Out · Random Density · Random Style · Track 1–13 Mute</p>
 </section>
 
 <!-- ============================================================ troubleshooting -->
@@ -455,7 +480,7 @@
     <tr><td>RANDOM doesn't change anything at once</td><td>While playing, the result waits for step 1; the display shows <span class="lcd">PAT 1 &gt; RND</span>. Check the lane isn't locked (padlock).</td></tr>
     <tr><td>Keyboard doesn't play or record</td><td>In Live, arm the track or set monitor to In. MIDI THRU must be on to pass it to the drum box; REC must be on and the song playing to record.</td></tr>
     <tr><td>The pop-up tips get in the way</td><td>Switch <b>HELP</b> off (top right). Knob values still show while you turn them.</td></tr>
-    <tr><td>A flam doesn't sound like a flam</td><td>Some drum boxes cut a sound short when it retriggers quickly, or ignore low velocities. Try a longer FLAM time, or raise VELOCITY.</td></tr>
+    <tr><td>A flam doesn't sound like a flam</td><td>Some drum boxes cut a sound short when it retriggers quickly, or ignore low velocities. Try a longer FLAM time, a higher FLAM LVL, or raise VELOCITY.</td></tr>
     <tr><td>TRoss Seq doesn't appear in Live</td><td>Rescan plug-ins (Option-click Rescan on a Mac). Check Audio Units / VST3 are switched on in Settings → Plug-Ins. On a Mac, check the installer actually ran (Privacy &amp; Security → Open Anyway).</td></tr>
   </table>
 </section>

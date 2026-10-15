@@ -30,6 +30,8 @@ public:
     void mouseUp (const juce::MouseEvent&) override { dragRow = -1; }
 
     static juce::Rectangle<float> padRect (int row, int step);
+    void showStepMenu (int row, int step);
+    void showAccentMenu();
 
 private:
     TrossSeqProcessor& proc;
@@ -48,12 +50,11 @@ public:
     void mouseDown (const juce::MouseEvent&) override;
     void resized() override { editor.setBounds (getLocalBounds()); }
     void startRename();
-    juce::uint32 shownHit = 0;
+    juce::uint32 clickTime = 0;   // last click: the strip flashes only for clicks
 private:
     TrossSeqProcessor& proc;
     int track;
     bool lastAccent = false;
-    juce::uint32 clickTime = 0;
     juce::TextEditor editor;
     void finishRename (bool keep);
 };

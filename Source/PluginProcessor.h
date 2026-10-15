@@ -46,7 +46,12 @@ public:
     int  getCurrentSlot() const { return currentSlot.load(); }   // the slot that plays and is edited
     int  getPendingSlot() const { return pendingSlot.load(); }   // queued slot, -1 = none
     int  getPlayStep() const    { return playStep.load(); }      // step being played, -1 = stopped
-    void clearCurrentPattern()  { patterns.clear (currentSlot.load()); }
+    void clearCurrentPattern();                                  // CLEAR key (can be undone)
+    // ---- clearing lanes (message thread, can be undone). row 0 = ACCENT, 1..13 = lanes
+    void clearRow (int row, bool allPatterns);
+    void clearRowFlams (int row, bool allPatterns);
+    // apply one flam style to every hit of a lane in the playing pattern (adds flams to all its steps)
+    void flamWholeRow (int row, uint8_t style);
 
     // track names (message thread; locked because hosts may save state from another thread)
     juce::String getTrackName (int t) const              { const juce::ScopedLock sl (nameLock); return names[t]; }
@@ -151,8 +156,14 @@ private:
     int stagedWrite = 0;                    // message thread
     std::atomic<int> staged { -1 };         // index of the buffer waiting, -1 = none
     void applyStaged();                     // audio thread
-    struct UndoEntry { int slot = 0; uint16_t rows[trossseq::kNumRows] {}, flams[trossseq::kNumRows] {}; };
+    struct SlotSnap { int slot = 0; uint16_t rows[trossseq::kNumRows] {}, flams[trossseq::kNumRows] {};
+                      uint8_t styles[trossseq::kNumRows][trossseq::kNumSteps] {}; };
+    struct UndoEntry { std::vector<SlotSnap> slots; };
     std::vector<UndoEntry> undoStack;       // message thread
+    void pushUndo (std::initializer_list<int> slots);
+    void pushUndoAllSlots();
+    SlotSnap snap (int slot) const;
+    void restore (const SlotSnap&);
     trossseq::Randomizer rnd;
 
     // per-block output
@@ -164,14 +175,19 @@ private:
     {
         std::atomic<float>* mute[trossseq::kNumTracks];
         std::atomic<float> *seqOn, *seqLen, *pattern, *rec, *velocity, *accentVel, *gate, *swing,
-                           *thru, *hostOut, *clockOut, *offset, *density, *rstyle, *flamTime;
+                           *thru, *hostOut, *clockOut, *offset, *density, *rstyle, *flamTime, *flamLevel;
     } raw {};
 
     void emit (const juce::MidiMessage& m, int sample);
     void noteOn (int track, int velocity, int sample, juce::int64 gateSamples);
     void flushNoteOffs (int sample);
     void doStep (int step, int sample, bool seqOn, juce::int64 gateSamples);
-    void doGrace (int step, int sample, juce::int64 flamSamples);
+    void doGrace (int step, int sample, juce::int64 lookSamples);
+    // grace notes waiting to be played (flam / drag / ruff), sample positions relative to this block
+    struct SchedNote { int track = 0, velocity = 0; juce::int64 due = 0, gate = 1; };
+    static constexpr int kMaxSched = 128;
+    SchedNote sched[kMaxSched];
+    int numSched = 0;
     bool audible (int track) const;
     void recordHit (int track, bool accent, double sixteenthPos, int len);
     void updateBlockTime (int numSamples);

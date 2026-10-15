@@ -346,8 +346,87 @@ int main (int argc, char** argv)
         std::vector<double> sdTimes;
         for (auto* e : *mf.getTrack (0)) if (e->message.isNoteOn() && e->message.getNoteNumber() == 38) sdTimes.push_back (e->message.getTimeStamp());
         check (sdTimes.size() == 3 && sdTimes[0] < 96 && sdTimes[1] == 96, "export: grace note just before step 5 (tick " + juce::String (sdTimes.empty() ? -1.0 : sdTimes[0]) + "), main on 96");
-        host.playing = false;
-        run (2);
+        // drag (2 graces) and ruff (3) with their own spacing and level; FLAM LEVEL knob for the rest
+        {
+            pats.clear (fs);
+            pats.setCell (fs, 2, 4, true); pats.setFlam (fs, 2, 4, true);
+            FlamStyle ruff; ruff.graces = 3; ruff.spacing = 3; ruff.level = 2;   // 40 ms, 50 %
+            pats.setFlamStyle (fs, 2, 4, ruff.encode());
+            pats.setCell (fs, 2, 12, true); pats.setFlam (fs, 2, 12, true);
+            FlamStyle drag; drag.graces = 2;                                    // knob spacing and level
+            pats.setFlamStyle (fs, 2, 12, drag.encode());
+            setP ("flamlevel", 40.0f);
+            host.playing = true; host.ppq = 0.0; evs.clear();
+            const auto t0r = now;
+            run (200);
+            auto n = ons (38);
+            const juce::int64 s40 = (juce::int64) std::round (0.040 * sr), s25 = (juce::int64) std::round (0.025 * sr);
+            bool ok = n.size() == 7;
+            if (ok)
+            {
+                ok &= n[0].t - t0r == 24000 - s40 && n[1].t - t0r == 24000 - s40 + s40 / 3 && n[2].t - t0r == 24000 - s40 + 2 * (s40 / 3);
+                ok &= n[3].t - t0r == 24000 && n[0].m.getVelocity() == 50 && n[3].m.getVelocity() == 100;
+                ok &= n[4].t - t0r == 72000 - s25 && n[5].t - t0r == 72000 - s25 + s25 / 2 && n[6].t - t0r == 72000;
+                ok &= n[4].m.getVelocity() == 40;
+            }
+            check (ok, "ruff: 3 grace notes over 40 ms at 50 %; drag: 2 over the FLAM knob's 25 ms at FLAM LEVEL 40 % (" + juce::String ((int) n.size()) + " notes)");
+            int open = 0, maxOpen = 0;
+            for (auto& e : evs) if (e.m.getNoteNumber() == 38) { if (e.m.isNoteOn()) ++open; if (e.m.isNoteOff()) --open; maxOpen = juce::jmax (maxOpen, open); }
+            check (maxOpen == 1, "every grace note ends before the next one starts");
+            setP ("flamlevel", 60.0f);
+
+            // styles survive save / load, and the export writes all grace notes
+            juce::MemoryBlock st2; proc.getStateInformation (st2);
+            TrossSeqProcessor o2; o2.setStateInformation (st2.getData(), (int) st2.getSize());
+            check (o2.patterns.flamStyle (fs, 2, 4).graces == 3 && o2.patterns.flamStyle (fs, 2, 4).spacing == 3 && o2.patterns.flamStyle (fs, 2, 12).graces == 2,
+                   "flam types and spacings saved with the project");
+            MidiExport::Settings xs2; xs2.bpm = 120.0;
+            auto mf2 = MidiExport::make (pats, proc.map, { fs }, xs2, "ruff");
+            int sdOn = 0;
+            for (auto* e : *mf2.getTrack (0)) if (e->message.isNoteOn() && e->message.getNoteNumber() == 38) ++sdOn;
+            check (sdOn == 7, "export: ruff and drag grace notes written (" + juce::String (sdOn) + " snare notes)");
+
+            // removing a flam forgets its style
+            pats.setFlam (fs, 2, 4, false);
+            pats.setFlam (fs, 2, 4, true);
+            check (pats.flamStyle (fs, 2, 4).graces == 1 && pats.flamStyle (fs, 2, 4).spacing == 0, "a flam that's removed and added again starts as a plain flam");
+
+            // one flam style on every hit of a lane
+            pats.setCell (fs, 2, 0, true); pats.setCell (fs, 2, 8, true);
+            proc.flamWholeRow (2, ruff.encode());
+            check (pats.getFlams (fs, 2) == pats.get (fs, 2) && pats.flamStyle (fs, 2, 8).graces == 3, "Use this flam on every hit in this lane");
+            proc.undoRandom();
+            check (! pats.flam (fs, 2, 8), "...and UNDO takes it back");
+            host.playing = false;
+            run (2);
+        }
+
+        // clearing lanes, with UNDO
+        {
+            pats.clear (fs);
+            pats.setCell (fs, 1, 0, true); pats.setCell (fs, 2, 4, true); pats.setFlam (fs, 2, 4, true);
+            pats.setCell (fs, 0, 0, true);
+            pats.setCell (5, 2, 7, true);   // SD in another slot
+            proc.clearRowFlams (2, false);
+            check (pats.cell (fs, 2, 4) && ! pats.flam (fs, 2, 4), "Clear this lane's flams: steps stay, flams go");
+            proc.undoRandom();
+            check (pats.flam (fs, 2, 4), "UNDO brings the flams back");
+            proc.clearRow (2, false);
+            check (pats.get (fs, 2) == 0 && pats.get (fs, 1) != 0 && pats.cell (5, 2, 7), "Clear this lane: only this lane, only this pattern");
+            proc.undoRandom();
+            proc.clearRow (2, true);
+            check (pats.get (fs, 2) == 0 && ! pats.cell (5, 2, 7) && pats.get (fs, 1) != 0, "Clear this lane in all 12 patterns");
+            proc.undoRandom();
+            check (pats.cell (5, 2, 7) && pats.cell (fs, 2, 4) && pats.flam (fs, 2, 4), "one UNDO restores the lane in every pattern");
+            proc.clearRow (0, false);
+            check (pats.get (fs, 0) == 0 && pats.get (fs, 1) != 0, "Clear the accent row");
+            proc.undoRandom();
+            proc.clearCurrentPattern();
+            check (pats.isEmpty (fs), "CLEAR empties the pattern");
+            proc.undoRandom();
+            check (pats.cell (fs, 1, 0) && pats.cell (fs, 0, 0) && pats.flam (fs, 2, 4), "CLEAR can be undone");
+            pats.clear (5);
+        }
         setP ("pattern", 0.0f);
         run (2);
     }
@@ -654,9 +733,43 @@ int main (int argc, char** argv)
             click (shift);
             click (juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier));
             check (! pats.cell (sl, 3, 7) && ! pats.flam (sl, 3, 7), "plain click switches the step (and its flam) off");
-            pats.setCell (sl, 3, 7, true); pats.setFlam (sl, 3, 7, true);   // leave one showing for the snapshot
+            pats.setCell (sl, 3, 7, true); pats.setFlam (sl, 3, 7, true);   // leave some showing for the snapshot
             pats.setCell (sl, 2, 14, true); pats.setFlam (sl, 2, 14, true);
+            { FlamStyle d; d.graces = 2; pats.setFlamStyle (sl, 2, 14, d.encode()); }
+            pats.setCell (sl, 4, 15, true); pats.setFlam (sl, 4, 15, true);
+            { FlamStyle r3; r3.graces = 3; r3.spacing = 3; pats.setFlamStyle (sl, 4, 15, r3.encode()); }
         }
+        // name strips: Shift-click renames (double-click doesn't), a plain click plays and flashes, the lane playing doesn't flash
+        {
+            NameStrip* strip = nullptr;
+            std::function<void (juce::Component&)> findStrip = [&] (juce::Component& c)
+            {
+                for (auto* ch : c.getChildren()) { if (auto* ns = dynamic_cast<NameStrip*> (ch)) { if (strip == nullptr) strip = ns; } findStrip (*ch); }
+            };
+            findStrip (*ed);
+            check (strip != nullptr, "name strip found");
+            if (strip != nullptr)
+            {
+                auto src = juce::Desktop::getInstance().getMainMouseSource();
+                auto press = [&] (juce::ModifierKeys mods, int clicks)
+                {
+                    juce::MouseEvent e (src, { 5.0f, 5.0f }, mods, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, strip, strip, juce::Time::getCurrentTime(), { 5.0f, 5.0f }, juce::Time::getCurrentTime(), clicks, false);
+                    strip->mouseDown (e);
+                };
+                auto editorShown = [&] { for (auto* ch : strip->getChildren()) if (auto* te = dynamic_cast<juce::TextEditor*> (ch)) return te->isVisible(); return false; };
+                const auto lb = juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier);
+                strip->clickTime = 0;
+                proc.lastSent[0] = juce::Time::getMillisecondCounter();   // as if the lane just played
+                check (strip->clickTime == 0, "a lane playing doesn't make its name flash");
+                press (lb, 2);
+                check (! editorShown() && strip->clickTime != 0, "double-click just plays (no rename)");
+                press (juce::ModifierKeys (juce::ModifierKeys::shiftModifier | juce::ModifierKeys::leftButtonModifier), 1);
+                check (editorShown(), "Shift-click opens the rename box");
+                for (auto* ch : strip->getChildren()) if (auto* te = dynamic_cast<juce::TextEditor*> (ch)) { te->setText ("KICK", false); te->onEscapeKey(); }
+                strip->clickTime = 0;
+            }
+        }
+
         if (help != nullptr)
         {
             auto countTips = [&] { int n = 0; for (auto* ch : ed->getChildren()) if (dynamic_cast<juce::TooltipWindow*> (ch)) ++n; return n; };

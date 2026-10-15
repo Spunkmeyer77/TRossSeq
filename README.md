@@ -35,11 +35,11 @@ port, so drum boxes with their own sequencers or tempo-synced effects follow alo
 |---|---|
 | VELOCITY / ACCENT | Note velocity for normal steps and for steps with the ACCENT row set |
 | GATE | How long each note is held: 5–95 % of a 16th (most drum boxes only care about the note-on) |
-| FLAM | How far before a flammed step the grace note plays (5–80 ms). **Shift-click** a pad to add a flam, Shift-click again to remove it |
+| FLAM / FLAM LVL | How far before a flammed step the grace notes start (5–80 ms), and how loud they are (10–100 %). **Shift-click** a pad to add or remove a flam; **right-click** a pad for drag (2 grace notes), ruff (3), its own spacing and level, or to use it on the whole lane |
 | HELP | Top right: switches the hover tips on or off (remembered for every copy) |
 | SWING | 50 % = straight, 66.7 % = triplet feel, up to 75 %. Pushes every second 16th later |
 | MIDI THRU | Passes your keyboard / pad controller through to the outputs, so you can play the drum box live |
-| Track name strips | Click to play that drum now (Shift-click = accent). With REC on while the song plays, the hit is recorded. Double-click to rename, right-click for MIDI learn |
+| Track name strips | Click to play that drum now (Cmd/Ctrl-click = accent); the strip flashes only for your clicks. With REC on while the song plays, the hit is recorded. **Shift-click** to rename, Alt-click to lock, right-click for MIDI learn and to **clear the lane** (this pattern or all 12, steps or only flams) |
 | NOTE / CH | Each track's MIDI note and channel: drag the red read-outs up or down. Note names use Ableton's naming (C1 = 36) |
 | M | Click: mutes the track. **Shift + hold:** solos the track for as long as you hold the mouse button (it plays even if it's muted, every other track goes quiet). Let go and everything is back as it was; nothing gets toggled |
 | LEARN | Click, then hit a key or pad: the track takes that note and channel |
@@ -47,7 +47,7 @@ port, so drum boxes with their own sequencers or tempo-synced effects follow alo
 | Step pads | 14 rows (ACCENT + 13 tracks) × 16 steps, in groups of four. Click to toggle, or drag along a row |
 | RUN | Sequencer on/off (MIDI THRU and the name strips still play) |
 | LENGTH | Pattern length, 1–16 steps: drag the red read-out up/down |
-| CLEAR | Clears the playing pattern |
+| CLEAR | Clears the playing pattern (UNDO brings it back). Right-click the ACCENT label to clear the accent row |
 | REC | While playing, incoming notes that match a track are written into the nearest step. Velocity above 100 also sets the accent |
 | PATTERN 1–12 | While playing, a new slot waits until the current pattern reaches step 1. Right-click a slot to copy it to another slot or clear it |
 | RANDOM | Writes a new pattern into the playing slot, lane by lane, the way each drum is usually played (kick on the beat, snare on the backbeat, busy hats, sparse toms and percussion). The ACCENT row is never changed. **Shift-click** for a small variation of the current pattern instead. While the song plays, the new pattern starts on step 1 (the RANDOM light blinks until then) |

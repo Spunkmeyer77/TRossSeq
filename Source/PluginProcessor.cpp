@@ -39,6 +39,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TrossSeqProcessor::createLay
     l.add (std::make_unique<APF> (juce::ParameterID { "flamtime", 1 }, "Flam Time", juce::NormalisableRange<float> (5.0f, 80.0f, 0.5f), 25.0f,
                                   juce::AudioParameterFloatAttributes().withStringFromValueFunction (
                                       [] (float v, int) { return juce::String (v, 1) + " ms"; })));
+    l.add (pct ("flamlevel", "Flam Level", 10.0f, 100.0f, 60.0f));
     l.add (pct ("density", "Random Density", 0.0f, 100.0f, 50.0f));
     l.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "rstyle", 1 }, "Random Style",
                                                          juce::StringArray { "Straight", "Electro", "Broken", "House", "Techno", "Detroit", "Miami Bass",
@@ -57,7 +58,7 @@ TrossSeqProcessor::TrossSeqProcessor()
     raw.seqOn = p ("seqon"); raw.seqLen = p ("seqlen"); raw.pattern = p ("pattern"); raw.rec = p ("rec");
     raw.velocity = p ("velocity"); raw.accentVel = p ("accvel"); raw.gate = p ("gate"); raw.swing = p ("swing");
     raw.thru = p ("thru"); raw.hostOut = p ("hostout"); raw.clockOut = p ("clockout"); raw.offset = p ("offset");
-    raw.density = p ("density"); raw.rstyle = p ("rstyle"); raw.flamTime = p ("flamtime");
+    raw.density = p ("density"); raw.rstyle = p ("rstyle"); raw.flamTime = p ("flamtime"); raw.flamLevel = p ("flamlevel");
 
     applyPreset (0);
 
@@ -106,6 +107,7 @@ void TrossSeqProcessor::prepareToPlay (double sr, int samplesPerBlock)
     wasPlaying = false;
     clock.stop();
     graceClock.stop();
+    numSched = 0;
     playStep = -1;
     numPending = 0;
     haveBlockTime = false;
@@ -327,13 +329,7 @@ void TrossSeqProcessor::randomise (RandomOp op, int track)
     const bool replaceWaiting = playing && waiting >= 0 && stagedBuf[waiting].slot == slot;
     for (int r = 0; r < kNumRows; ++r) rows[r] = replaceWaiting ? stagedBuf[waiting].rows[r] : patterns.get (slot, r);
 
-    if (! replaceWaiting)   // remember the pattern as it was, for UNDO
-    {
-        UndoEntry e; e.slot = slot;
-        for (int r = 0; r < kNumRows; ++r) { e.rows[r] = patterns.get (slot, r); e.flams[r] = patterns.getFlams (slot, r); }
-        undoStack.push_back (e);
-        if (undoStack.size() > 32) undoStack.erase (undoStack.begin());
-    }
+    if (! replaceWaiting) pushUndo ({ slot });   // remember the pattern as it was, for UNDO
 
     LaneInfo lanes[kNumTracks];
     for (int t = 0; t < kNumTracks; ++t)
@@ -385,8 +381,83 @@ bool TrossSeqProcessor::undoRandom()
     }
     const auto e = undoStack.back();
     undoStack.pop_back();
-    for (int r = 1; r < kNumRows; ++r) { patterns.set (e.slot, r, e.rows[r]); patterns.setFlams (e.slot, r, e.flams[r]); }
+    for (auto& sn : e.slots) restore (sn);
     return true;
+}
+
+// ---- undo snapshots: steps, flams and flam styles of whole slots
+TrossSeqProcessor::SlotSnap TrossSeqProcessor::snap (int slot) const
+{
+    SlotSnap sn; sn.slot = slot;
+    for (int r = 0; r < kNumRows; ++r)
+    {
+        sn.rows[r] = patterns.get (slot, r);
+        sn.flams[r] = patterns.getFlams (slot, r);
+        for (int s = 0; s < kNumSteps; ++s) sn.styles[r][s] = patterns.getFlamStyle (slot, r, s);
+    }
+    return sn;
+}
+
+void TrossSeqProcessor::restore (const SlotSnap& sn)
+{
+    for (int r = 0; r < kNumRows; ++r)
+    {
+        patterns.set (sn.slot, r, sn.rows[r]);
+        patterns.setFlams (sn.slot, r, sn.flams[r]);
+        for (int s = 0; s < kNumSteps; ++s) patterns.setFlamStyle (sn.slot, r, s, sn.styles[r][s]);
+    }
+}
+
+void TrossSeqProcessor::pushUndo (std::initializer_list<int> slots)
+{
+    UndoEntry e;
+    for (int sl : slots) e.slots.push_back (snap (sl));
+    undoStack.push_back (std::move (e));
+    if (undoStack.size() > 32) undoStack.erase (undoStack.begin());
+}
+
+void TrossSeqProcessor::pushUndoAllSlots()
+{
+    UndoEntry e;
+    for (int sl = 0; sl < kNumSlots; ++sl) e.slots.push_back (snap (sl));
+    undoStack.push_back (std::move (e));
+    if (undoStack.size() > 32) undoStack.erase (undoStack.begin());
+}
+
+// ---- clearing
+void TrossSeqProcessor::clearCurrentPattern()
+{
+    const int slot = currentSlot.load();
+    if (patterns.isEmpty (slot) && patterns.get (slot, 0) == 0) return;
+    pushUndo ({ slot });
+    patterns.clear (slot);
+}
+
+void TrossSeqProcessor::clearRow (int row, bool allPatterns)
+{
+    if (row < 0 || row >= kNumRows) return;
+    if (allPatterns) pushUndoAllSlots(); else pushUndo ({ currentSlot.load() });
+    for (int sl = 0; sl < kNumSlots; ++sl)
+        if (allPatterns || sl == currentSlot.load()) patterns.set (sl, row, 0);
+}
+
+void TrossSeqProcessor::clearRowFlams (int row, bool allPatterns)
+{
+    if (row <= 0 || row >= kNumRows) return;
+    if (allPatterns) pushUndoAllSlots(); else pushUndo ({ currentSlot.load() });
+    for (int sl = 0; sl < kNumSlots; ++sl)
+        if (allPatterns || sl == currentSlot.load()) patterns.setFlams (sl, row, 0);
+}
+
+void TrossSeqProcessor::flamWholeRow (int row, uint8_t style)
+{
+    if (row <= 0 || row >= kNumRows) return;
+    const int slot = currentSlot.load();
+    pushUndo ({ slot });
+    const auto steps = patterns.get (slot, row);
+    patterns.setFlams (slot, row, steps);
+    for (int s = 0; s < kNumSteps; ++s)
+        if ((steps >> s) & 1) patterns.setFlamStyle (slot, row, s, style);
 }
 
 void TrossSeqProcessor::applyStaged()
@@ -474,8 +545,9 @@ bool TrossSeqProcessor::audible (int t) const
     return solo >= 0 ? t == solo : raw.mute[t]->load() < 0.5f;   // a held solo beats every mute
 }
 
-// a flam's grace note: `step` is coming up in flamSamples; its flammed hits play now, softer
-void TrossSeqProcessor::doGrace (int step, int sample, juce::int64 flamSamples)
+// `step` is coming up in lookSamples: schedule the grace notes of its flams (1 = flam, 2 = drag, 3 = ruff),
+// spread evenly before the step and all over before the main hit
+void TrossSeqProcessor::doGrace (int step, int sample, juce::int64 lookSamples)
 {
     // the pattern that will be playing at that step: a queued slot or random result takes over on step 1
     int slot = currentSlot.load();
@@ -489,13 +561,21 @@ void TrossSeqProcessor::doGrace (int step, int sample, juce::int64 flamSamples)
     auto rowOf = [&] (int r) { return st != nullptr ? st->rows[r] : patterns.get (slot, r); };
     const bool accent = (rowOf (0) >> step) & 1;
     const int vel = (int) (accent ? raw.accentVel->load() : raw.velocity->load());
-    const int graceVel = juce::jmax (1, juce::roundToInt (vel * 0.6f));
-    const auto graceGate = juce::jmax ((juce::int64) 1, flamSamples * 3 / 4);   // over before the main hit
+    const float knobMs = raw.flamTime->load(), knobLevel = raw.flamLevel->load();
     for (int t = 0; t < kNumTracks; ++t)
     {
         const uint16_t fl = (st != nullptr && ((st->clearFlams >> (t + 1)) & 1)) ? 0 : patterns.getFlams (slot, t + 1);
-        if (((rowOf (t + 1) & fl) >> step & 1) && audible (t))
-            noteOn (t, graceVel, sample, graceGate);
+        if (! (((rowOf (t + 1) & fl) >> step) & 1) || ! audible (t)) continue;
+        const auto fs = patterns.flamStyle (slot, t + 1, step);
+        const auto spacing = juce::jlimit ((juce::int64) 2, lookSamples,
+                                           (juce::int64) std::round (fs.spacingMs (knobMs) / 1000.0 * sampleRate));
+        const int graceVel = juce::jlimit (1, 127, juce::roundToInt (vel * fs.levelPct (knobLevel) / 100.0f));
+        const auto gap = juce::jmax ((juce::int64) 1, spacing / fs.graces);
+        for (int k = 0; k < fs.graces && numSched < kMaxSched; ++k)
+        {
+            const auto before = spacing - k * gap;   // first grace furthest from the step
+            sched[numSched++] = { t, graceVel, sample + (lookSamples - before), juce::jmax ((juce::int64) 1, gap * 3 / 4) };
+        }
     }
 }
 
@@ -556,9 +636,9 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     const double sixteenthsPerSample = bpm / 60.0 * 4.0 / sampleRate;
     const double samplesPerStep = 1.0 / sixteenthsPerSample;
     const auto gateSamples = (juce::int64) std::round (raw.gate->load() / 100.0 * samplesPerStep);
-    const double flamMs = raw.flamTime->load();
-    const auto flamSamples = (juce::int64) std::round (flamMs / 1000.0 * sampleRate);
-    const double flamSixteenths = juce::jmin (0.45, flamSamples * sixteenthsPerSample);   // never more than half a step ahead
+    // grace notes are looked for this far ahead: the longest flam spacing, but never more than half a step
+    const double graceLook16 = juce::jmin (0.45, FlamStyle::kMaxSpacingMs / 1000.0 * sampleRate * sixteenthsPerSample);
+    const auto graceLookSamples = (juce::int64) std::floor (graceLook16 / sixteenthsPerSample);
     if (isStandalone() && ! hostTransport && playing) internalPpq += numSamples * sixteenthsPerSample / 4.0;
 
     // ---- pattern selector: while playing, a new slot waits until the pattern is back at step 1
@@ -583,6 +663,7 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         wasPlaying = false;
         clock.stop();
         graceClock.stop();
+        numSched = 0;
         playStep = -1;
     }
 
@@ -617,8 +698,11 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         const double q = q0 + i * sixteenthsPerSample;
         if (playing)
         {
-            const auto grace = graceClock.advance (q + flamSixteenths);
-            if (grace >= 0 && seqOn) doGrace (wrapStep (grace, len), i, flamSamples);
+            const auto grace = graceClock.advance (q + graceLook16);
+            if (grace >= 0 && seqOn) doGrace (wrapStep (grace, len), i, graceLookSamples);
+            for (int n = 0; n < numSched;)   // grace notes due now
+                if (sched[n].due <= i) { noteOn (sched[n].track, sched[n].velocity, i, sched[n].gate); sched[n] = sched[--numSched]; }
+                else ++n;
             const auto step = clock.advance (q);
             if (step >= 0) doStep (wrapStep (step, len), i, seqOn, gateSamples);
             if (clockOut && directOut.isOpen())
@@ -665,6 +749,7 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
             else ++p;
     }
     for (int p = 0; p < numPending; ++p) pending[p].sample -= numSamples;
+    for (int n = 0; n < numSched; ++n) sched[n].due -= numSamples;
     if (playing) wasPlaying = true;
 
     midi.swapWith (out);
@@ -686,6 +771,15 @@ void TrossSeqProcessor::getStateInformation (juce::MemoryBlock& destData)
         bool any = false;
         for (int r = 0; r < kNumRows; ++r) { fl.add (juce::String::toHexString ((int) patterns.getFlams (s, r))); any |= patterns.getFlams (s, r) != 0; }
         if (any) pats.setProperty ("flams" + juce::String (s), fl.joinIntoString (" "), nullptr);
+        juce::StringArray st;
+        bool anyStyle = false;
+        for (int r = 0; r < kNumRows; ++r)
+        {
+            juce::String hex;
+            for (int k = 0; k < kNumSteps; ++k) { const auto b = patterns.getFlamStyle (s, r, k); hex << juce::String::toHexString ((int) b).paddedLeft ('0', 2); anyStyle |= b != 0; }
+            st.add (hex);
+        }
+        if (anyStyle) pats.setProperty ("fstyle" + juce::String (s), st.joinIntoString (" "), nullptr);
     }
     state.removeChild (state.getChildWithName ("MAP"), nullptr);
     state.appendChild (mapToTree(), nullptr);
@@ -715,6 +809,12 @@ void TrossSeqProcessor::setStateInformation (const void* data, int sizeInBytes)
             fl.addTokens (pats.getProperty ("flams" + juce::String (s)).toString(), " ", "");
             for (int r = 0; r < kNumRows; ++r)
                 patterns.setFlams (s, r, (uint16_t) (r < fl.size() ? fl[r].getHexValue32() & 0xffff : 0));
+            juce::StringArray st;
+            st.addTokens (pats.getProperty ("fstyle" + juce::String (s)).toString(), " ", "");
+            for (int r = 0; r < kNumRows; ++r)
+                for (int k = 0; k < kNumSteps; ++k)
+                    patterns.setFlamStyle (s, r, k, (uint8_t) (r < st.size() && st[r].length() >= 2 * kNumSteps
+                                                                   ? st[r].substring (2 * k, 2 * k + 2).getHexValue32() & 0xff : 0));
         }
         state.removeChild (pats, nullptr);
     }
