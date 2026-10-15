@@ -111,14 +111,14 @@
 
   <section class="flow">
     <h2><span class="n">1</span>What TRoss Seq does</h2>
-    <p class="lead">TRoss Seq is a 16-step drum sequencer that plays your hardware drum machines over MIDI, locked to your DAW's tempo.</p>
+    <p class="lead">TRoss Seq is a 16-step drum sequencer that plays your drum boxes over MIDI, locked to your DAW's tempo: hardware drum boxes, and software drum boxes, whether they're plug-ins in your DAW or apps running on their own.</p>
     <ul>
       <li><b>13 drum lanes plus an accent row</b>, 16 steps each, programmed on lit step pads.</li>
-      <li><b>Every lane sends its own MIDI note on its own channel</b>, so one TRoss Seq can play one drum box or several at once.</li>
+      <li><b>Every lane sends its own MIDI note on its own channel</b>, so one TRoss Seq can play one drum box or several at once, hardware or software.</li>
       <li><b>12 pattern slots</b>. A new slot always waits for the current pattern to finish, so changes land on the bar.</li>
       <li><b>A drum-aware randomiser</b> that writes patterns the way each drum is usually played, with styles, density, lane locks, variations, fills and undo.</li>
       <li><b>Two ways out</b>: straight to a MIDI port on your computer, or to your DAW's MIDI routing.</li>
-      <li><b>Flams, drags and ruffs</b> on any step (<span class="mod">Shift</span>-click, right-click to edit), and a <b>drum map library</b> to keep one map per drum box.</li>
+      <li><b>Flams, drags and ruffs</b> on any step (<span class="mod">Shift</span>-click, right-click to edit), and a <b>drum map library</b> to keep one map per drum box, with built-in maps for hardware and software drum boxes.</li>
       <li>Swing, gate, accent velocity, MIDI clock out, MIDI learn, keyboard recording and MIDI file export.</li>
     </ul>
     <p>TRoss Seq makes no sound of its own. It is an instrument plug-in that outputs MIDI, which is why it loads on a MIDI or instrument track.</p>
@@ -242,8 +242,9 @@
   </table>
   <div class="note"><b>Check your drum box.</b> The preset maps follow each maker's published default notes. If a sound doesn't trigger, look up its note in the drum box's manual or MIDI settings and fix that lane with LEARN or the NOTE read-out.</div>
 
-  <h3>Playing a software drum machine in Live</h3>
-  <p>Live doesn't pass MIDI from one plug-in to another, so send TRoss Seq to a virtual MIDI port and play the software from there. On a Mac:</p>
+  <h3>Playing a software drum box</h3>
+  <p><b>Standalone apps</b> (a software drum box running on its own, outside the DAW): pick the app's MIDI input under <b>MIDI OUT PORT</b> if it creates one, or send TRoss Seq to a virtual MIDI port (below) and set the app to listen to that port. TRoss Seq still follows your DAW's tempo.</p>
+  <p><b>Plug-ins in Live:</b> Live doesn't pass MIDI from one plug-in to another, so send TRoss Seq to a virtual MIDI port and play the plug-in from there. On a Mac:</p>
   <ol class="steps">
     <li>Open <b>Audio MIDI Setup</b> → Window → Show MIDI Studio, double-click <b>IAC Driver</b> and tick <b>Device is online</b>.</li>
     <li>In TRoss Seq, set <b>MIDI OUT PORT</b> to <b>IAC Driver Bus 1</b> and pick the software's map in PRESETS (e.g. UVI Prime 8).</li>

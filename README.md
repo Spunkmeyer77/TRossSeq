@@ -1,6 +1,6 @@
 # TRoss Seq
 
-16-step MIDI drum sequencer for playing hardware drum machines (AU / VST3 / LV2) by Ticco Ross, 2026.
+16-step MIDI drum sequencer for playing drum boxes, hardware and software, plug-ins or standalone apps (AU / VST3 / LV2) by Ticco Ross, 2026.
 
 Thirteen drum tracks plus an accent row, 12 pattern slots, and each track sends its own MIDI note on its own channel,
 so one TRoss Seq can play one drum box, or several drum boxes at once.
