@@ -697,6 +697,119 @@ int main (int argc, char** argv)
         check (std::abs (endT - 4 * 16 * 24) < 0.5, "export: the chain as one 4-bar clip");
     }
 
+    // 14e. SOLO buttons: any S lit = only the soloed lanes play (even if muted); the held Shift-solo beats them
+    {
+        TrossSeqProcessor sp;
+        FakeHost h3; sp.setPlayHead (&h3);
+        sp.setRateAndBufferSizeDetails (sr, block); sp.prepareToPlay (sr, block);
+        for (int sl = 0; sl < 2; ++sl) sp.patterns.clear (sl);
+        sp.patterns.setCell (0, 1, 0, true);   // BD
+        sp.patterns.setCell (0, 2, 4, true);   // SD
+        sp.patterns.setCell (0, 5, 8, true);   // CP
+        auto sP = [&] (const char* id, float v) { auto* q = sp.apvts.getParameter (id); q->setValueNotifyingHost (q->convertTo0to1 (v)); };
+        juce::AudioBuffer<float> b3 (2, block);
+        auto bar = [&]
+        {
+            std::vector<int> notes;
+            h3.playing = true; h3.ppq = 0.0;
+            for (int k = 0; k < 200; ++k)
+            {
+                juce::MidiBuffer m; sp.processBlock (b3, m);
+                for (const auto md : m) if (md.getMessage().isNoteOn()) notes.push_back (md.getMessage().getNoteNumber());
+                h3.ppq += block / sr * h3.bpm / 60.0;
+            }
+            h3.playing = false; juce::MidiBuffer m; sp.processBlock (b3, m);
+            return notes;
+        };
+        check (sp.apvts.getParameter ("solo1") != nullptr && sp.apvts.getParameter ("solo13") != nullptr, "13 SOLO parameters");
+        check (bar() == std::vector<int> { 36, 38, 39 }, "no solo: BD, SD, CP play");
+        sP ("solo2", 1.0f);
+        check (bar() == std::vector<int> { 38 }, "S on the snare: only the snare plays");
+        sP ("solo5", 1.0f); sP ("mute5", 1.0f);
+        check (bar() == std::vector<int> { 38, 39 }, "two lanes soloed (one of them muted): both play, the solo beats the mute");
+        sp.momentarySolo = 0;
+        check (bar() == std::vector<int> { 36 }, "Shift-held M on BD beats the S buttons");
+        sp.momentarySolo = -1;
+        sP ("solo2", 0.0f); sP ("solo5", 0.0f);
+        check (bar() == std::vector<int> { 36, 38 }, "solos off: the mute counts again");
+        sP ("mute5", 0.0f);
+    }
+
+    // 14f. negative PORT DELAY: the port gets every note early, the host still gets it on the grid,
+    // no step lost at the start and none doubled when the host loops
+    {
+        TrossSeqProcessor np;
+        FakeHost h4; np.setPlayHead (&h4);
+        np.setRateAndBufferSizeDetails (sr, block); np.prepareToPlay (sr, block);
+        np.patterns.clear (0);
+        for (int st : { 0, 4, 8, 12 }) np.patterns.setCell (0, 1, st, true);   // BD on 1, 5, 9, 13
+        np.patterns.setCell (0, 2, 4, true); np.patterns.setFlam (0, 2, 4, true);   // flammed snare on 5
+        auto* off = np.apvts.getParameter ("offset");
+        check (off->getNormalisableRange().start <= -250.0f && off->getNormalisableRange().end >= 250.0f, "PORT DELAY goes from -250 to +250 ms");
+        off->setValueNotifyingHost (off->convertTo0to1 (-50.0f));   // 2400 samples early
+        std::vector<juce::int64> port, hostK, portSd, hostSd;
+        juce::int64 t = 0;
+        np.portSpy = [&] (const juce::MidiMessage& m, juce::int64 at)
+        {
+            if (m.isNoteOn() && m.getNoteNumber() == 36) port.push_back (at);
+            if (m.isNoteOn() && m.getNoteNumber() == 38) portSd.push_back (at);
+        };
+        // the plug-in's own sample counter started at prepareToPlay; line it up with ours
+        juce::AudioBuffer<float> b4 (2, block);
+        h4.playing = true; h4.ppq = 0.0;
+        int open = 0;
+        auto runN = [&] (int blocks, double loopAt)   // loopAt: the host jumps back to 0 when it gets there
+        {
+            for (int k = 0; k < blocks; ++k)
+            {
+                juce::MidiBuffer m; np.processBlock (b4, m);
+                for (const auto md : m)
+                {
+                    const auto mm = md.getMessage();
+                    if (mm.isNoteOn()) ++open; else if (mm.isNoteOff()) --open;
+                    if (mm.isNoteOn() && mm.getNoteNumber() == 36) hostK.push_back (t + md.samplePosition);
+                    if (mm.isNoteOn() && mm.getNoteNumber() == 38) hostSd.push_back (t + md.samplePosition);
+                }
+                h4.ppq += block / sr * h4.bpm / 60.0;
+                if (h4.ppq >= loopAt - 1e-9) h4.ppq -= loopAt;
+                t += block;
+            }
+        };
+        runN (600, 4.0);   // 3 times round a 1-bar loop
+        std::vector<juce::int64> wantHost, wantPort;
+        for (int b = 0; b < 3; ++b)
+            for (int st : { 0, 4, 8, 12 })
+            {
+                wantHost.push_back (b * 96000 + st * 6000);
+                wantPort.push_back (b * 96000 + st * 6000 - 2400);
+            }
+        wantPort[0] = 0;   // the very first step can't go out before the start
+        wantPort.push_back (3 * 96000 - 2400);   // and the 4th time round is already on its way when we stop listening
+        // the port spy counts from prepareToPlay, our t from the same moment
+        auto list = [] (const std::vector<juce::int64>& v) { juce::String r; for (auto x : v) r << (int) x << " "; return r; };
+        check (hostK == wantHost, "HOST OUT: kicks still on the grid, once each, over 3 loops (" + list (hostK) + ")");
+        check (port == wantPort, "MIDI port: every kick 50 ms (2400 samples) early, once each, over 3 loops (" + list (port) + ")");
+        check (portSd.size() == 6 && hostSd.size() == 6, "flammed snare: grace + main, once per loop, on both outputs ("
+               + juce::String ((int) portSd.size()) + " / " + juce::String ((int) hostSd.size()) + ")");
+        if (portSd.size() == 6 && hostSd.size() == 6)
+            check (portSd[1] == 24000 - 2400 && hostSd[1] == 24000 && hostSd[0] - portSd[0] == 2400, "flam timing moves early with the port");
+        // start in the middle of the song: the step at the start position plays, on time for the host
+        h4.playing = false; { juce::MidiBuffer m; np.processBlock (b4, m); } t += block;
+        port.clear(); hostK.clear();
+        h4.ppq = 1.0; h4.playing = true;   // = step 5
+        const auto startT = t;
+        runN (50, 1000.0);   // just short of step 9 on the grid (24000)
+        check (hostK.size() == 1 && hostK[0] == startT && port.size() == 2 && port[0] == startT && port[1] == startT + 24000 - 2400,
+               "starting on step 5: it plays at once, step 9 goes to the port early (host " + list (hostK) + "/ port " + list (port) + "from " + juce::String ((int) startT) + ")");
+        h4.playing = false; { juce::MidiBuffer m; np.processBlock (b4, m); }
+        check (open == 0, "stopping ends every note, the held-back ones too");
+        // positive delay still the same: host on the grid
+        off->setValueNotifyingHost (off->convertTo0to1 (20.0f));
+        hostK.clear(); t = 0; h4.ppq = 0.0; h4.playing = true;
+        runN (200, 1000.0);
+        check (hostK == std::vector<juce::int64> { 0, 24000, 48000, 72000 }, "positive PORT DELAY: host notes untouched");
+    }
+
     // 14c. drum map library
     {
         auto dir = outDir.getChildFile ("maps");
@@ -874,6 +987,10 @@ int main (int argc, char** argv)
             auto img = ed->createComponentSnapshot (ed->getLocalBounds(), true, 2.0f);
             auto f = outDir.getChildFile ("about_2x.png"); f.deleteFile();
             if (auto os = f.createOutputStream()) juce::PNGImageFormat().writeImageToStream (img, *os);
+            check (juce::String (AboutOverlay::kContact) == "ticcoross@gmail.com" && about->contactLink.isVisible()
+                   && about->card().contains (about->contactLink.getBounds().toFloat())
+                   && about->contactLink.getURL().toString (false) == "mailto:ticcoross@gmail.com",
+                   "About: contact ticcoross@gmail.com, a mail link inside the card");
             about->mouseDown (e);
             check (! about->isVisible(), "clicking closes About");
         }
@@ -903,6 +1020,24 @@ int main (int argc, char** argv)
             mb->mouseUp (ev (juce::ModifierKeys (juce::ModifierKeys::shiftModifier)));
             check (heldSolo && proc.momentarySolo.load() == -1 && proc.apvts.getRawParameterValue ("mute3")->load() < 0.5f,
                    "Shift + hold on M: solo while held, gone on release, mute not toggled");
+        }
+    }
+    // the S buttons: one per lane, next to M, each switches its lane's solo
+    {
+        std::vector<juce::Button*> solos;
+        std::function<void (juce::Component&)> find = [&] (juce::Component& c)
+        {
+            for (auto* ch : c.getChildren()) { if (ch->getComponentID().startsWith ("solo")) if (auto* b = dynamic_cast<juce::Button*> (ch)) solos.push_back (b); find (*ch); }
+        };
+        find (*ed);
+        check (solos.size() == 13, "13 S buttons on the panel (" + juce::String ((int) solos.size()) + ")");
+        if (solos.size() == 13)
+        {
+            solos[3]->setToggleState (true, juce::sendNotificationSync);
+            const bool on = proc.apvts.getRawParameterValue ("solo4")->load() > 0.5f;
+            solos[3]->setToggleState (false, juce::sendNotificationSync);
+            check (on && proc.apvts.getRawParameterValue ("solo4")->load() < 0.5f, "S on: lane 4 soloed, S off: not");
+            solos[1]->setToggleState (true, juce::sendNotificationSync);   // leave one lit for the snapshot
         }
     }
     std::printf ("editor size %d x %d\n", ed->getWidth(), ed->getHeight());

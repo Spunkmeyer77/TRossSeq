@@ -30,7 +30,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TrossSeqProcessor::createLay
     l.add (std::make_unique<API> (juce::ParameterID { "accvel", 1 }, "Accent Velocity", 1, 127, 127));
     l.add (pct ("gate", "Gate", 5.0f, 95.0f, 50.0f));
     l.add (pct ("swing", "Swing", 50.0f, 75.0f, 50.0f));
-    l.add (std::make_unique<APF> (juce::ParameterID { "offset", 1 }, "Port Delay", juce::NormalisableRange<float> (0.0f, 250.0f, 0.5f), 0.0f,
+    l.add (std::make_unique<APF> (juce::ParameterID { "offset", 1 }, "Port Delay", juce::NormalisableRange<float> (-250.0f, 250.0f, 0.5f), 0.0f,
                                   juce::AudioParameterFloatAttributes().withStringFromValueFunction (
                                       [] (float v, int) { return juce::String (v, 1) + " ms"; })));
     l.add (onOff ("thru", "MIDI Thru", true));
@@ -46,6 +46,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout TrossSeqProcessor::createLay
                                                                              "Breakbeat", "Hip-Hop", "Dub", "Latin", "Industrial" }, 0));
     for (int t = 0; t < kNumTracks; ++t)
         l.add (onOff ("mute" + juce::String (t + 1), "Track " + juce::String (t + 1) + " Mute", false));
+    for (int t = 0; t < kNumTracks; ++t)
+        l.add (onOff ("solo" + juce::String (t + 1), "Track " + juce::String (t + 1) + " Solo", false));
     return l;
 }
 
@@ -54,7 +56,7 @@ TrossSeqProcessor::TrossSeqProcessor()
       apvts (*this, nullptr, "TROSSSEQ", createLayout())
 {
     auto p = [this] (const juce::String& id) { return apvts.getRawParameterValue (id); };
-    for (int t = 0; t < kNumTracks; ++t) raw.mute[t] = p ("mute" + juce::String (t + 1));
+    for (int t = 0; t < kNumTracks; ++t) { raw.mute[t] = p ("mute" + juce::String (t + 1)); raw.solo[t] = p ("solo" + juce::String (t + 1)); }
     raw.seqOn = p ("seqon"); raw.seqLen = p ("seqlen"); raw.pattern = p ("pattern"); raw.rec = p ("rec");
     raw.velocity = p ("velocity"); raw.accentVel = p ("accvel"); raw.gate = p ("gate"); raw.swing = p ("swing");
     raw.thru = p ("thru"); raw.hostOut = p ("hostout"); raw.clockOut = p ("clockout"); raw.offset = p ("offset");
@@ -108,6 +110,9 @@ void TrossSeqProcessor::prepareToPlay (double sr, int samplesPerBlock)
     clock.stop();
     graceClock.stop();
     numSched = 0;
+    numHeld = 0;
+    skipSteps = skipGrace = 0;
+    lastFiredStep = lastGraceStep = LLONG_MIN;
     playStep = -1;
     numPending = 0;
     haveBlockTime = false;
@@ -488,31 +493,53 @@ void TrossSeqProcessor::updateBlockTime (int numSamples)
         blockStartMs += 0.05 * (now - blockStartMs);
 }
 
-void TrossSeqProcessor::emit (const juce::MidiMessage& m, int sample)
+// fromSeq = the sequencer made it (steps, flams and their note-offs). With a negative PORT DELAY the
+// sequencer runs ahead: the port gets it now, the host gets it held back to its place in the song.
+void TrossSeqProcessor::emit (const juce::MidiMessage& m, int sample, bool fromSeq, juce::int64 hostSample)
 {
-    if (hostOutOn) out.addEvent (m, sample);
-    if (directOut.isOpen()) directOut.push (m, blockStartMs + sample * 1000.0 / sampleRate + offsetMs);
+    if (hostOutOn)
+    {
+        const auto at = fromSeq && aheadSamples > 0 ? (hostSample >= 0 ? hostSample : sample + aheadSamples) : (juce::int64) sample;
+        if (at <= sample || at < 0) out.addEvent (m, sample);
+        else if (numHeld < kMaxHeld && m.getRawDataSize() <= 3)
+        {
+            auto& h = held[numHeld++];
+            h.size = m.getRawDataSize();
+            std::memcpy (h.bytes, m.getRawData(), (size_t) h.size);
+            h.due = at;
+        }
+    }
+    if (directOut.isOpen()) directOut.push (m, blockStartMs + sample * 1000.0 / sampleRate + aheadMsPort);
+    if (portSpy) portSpy (m, blockCounter + sample);
 }
 
-void TrossSeqProcessor::noteOn (int track, int velocity, int sample, juce::int64 gateSamples)
+void TrossSeqProcessor::noteOn (int track, int velocity, int sample, juce::int64 gateSamples, bool fromSeq, juce::int64 hostSample)
 {
     const int ch = map.channel (track), nn = map.note (track);
     // the same note still sounding: end it first so the drum box sees a fresh hit
     for (int i = 0; i < numPending; ++i)
         if (pending[i].channel == ch && pending[i].note == nn)
         {
-            emit (juce::MidiMessage::noteOff (ch, nn), sample);
+            emit (juce::MidiMessage::noteOff (ch, nn), sample, pending[i].fromSeq,
+                  hostSample >= 0 ? hostSample : -1);
             pending[i] = pending[--numPending];
             break;
         }
-    emit (juce::MidiMessage::noteOn (ch, nn, (juce::uint8) juce::jlimit (1, 127, velocity)), sample);
-    if (numPending < kMaxPending) pending[numPending++] = { ch, nn, sample + juce::jmax ((juce::int64) 1, gateSamples) };
-    else emit (juce::MidiMessage::noteOff (ch, nn), sample);
+    emit (juce::MidiMessage::noteOn (ch, nn, (juce::uint8) juce::jlimit (1, 127, velocity)), sample, fromSeq, hostSample);
+    if (numPending < kMaxPending) pending[numPending++] = { ch, nn, sample + juce::jmax ((juce::int64) 1, gateSamples), fromSeq };
+    else emit (juce::MidiMessage::noteOff (ch, nn), sample, fromSeq, hostSample);
     lastSent[track] = juce::Time::getMillisecondCounter();
 }
 
 void TrossSeqProcessor::flushNoteOffs (int sample)
 {
+    // notes held back for the host: send their note-offs now, drop the note-ons that hadn't gone out
+    for (int i = 0; i < numHeld; ++i)
+    {
+        juce::MidiMessage m (held[i].bytes, held[i].size);
+        if (m.isNoteOff()) out.addEvent (m, sample);
+    }
+    numHeld = 0;
     for (int i = 0; i < numPending; ++i)
         emit (juce::MidiMessage::noteOff (pending[i].channel, pending[i].note), sample);
     numPending = 0;
@@ -570,7 +597,7 @@ void TrossSeqProcessor::chainRemoveLast()
     setChain (c);
 }
 
-void TrossSeqProcessor::doStep (int step, long long absStep, int len, int sample, bool seqOn, juce::int64 gateSamples)
+void TrossSeqProcessor::doStep (int step, long long absStep, int len, int sample, bool seqOn, juce::int64 gateSamples, juce::int64 hostSample)
 {
     const int chained = chainSlotFor (absStep, len);
     if (chained >= 0)   // a chain decides which pattern plays, from the song position
@@ -598,13 +625,17 @@ void TrossSeqProcessor::doStep (int step, long long absStep, int len, int sample
     const int vel = (int) (accent ? raw.accentVel->load() : raw.velocity->load());
     for (int t = 0; t < kNumTracks; ++t)
         if (patterns.cell (slot, t + 1, step) && audible (t))
-            noteOn (t, vel, sample, gateSamples);
+            noteOn (t, vel, sample, gateSamples, true, hostSample);
 }
 
 bool TrossSeqProcessor::audible (int t) const
 {
-    const int solo = momentarySolo.load();
-    return solo >= 0 ? t == solo : raw.mute[t]->load() < 0.5f;   // a held solo beats every mute
+    const int held = momentarySolo.load();
+    if (held >= 0) return t == held;            // Shift-held M beats everything
+    bool anySolo = false;
+    for (int i = 0; i < kNumTracks; ++i) anySolo |= raw.solo[i]->load() > 0.5f;
+    if (anySolo) return raw.solo[t]->load() > 0.5f;   // S buttons: only soloed lanes play (even if muted)
+    return raw.mute[t]->load() < 0.5f;
 }
 
 // `step` is coming up in lookSamples: schedule the grace notes of its flams (1 = flam, 2 = drag, 3 = ruff),
@@ -663,6 +694,8 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     out.clear();
     hostOutOn = raw.hostOut->load() > 0.5f;
     offsetMs  = raw.offset->load();
+    aheadSamples = offsetMs < 0.0f ? (juce::int64) std::llround (-offsetMs / 1000.0 * sampleRate) : 0;
+    aheadMsPort  = juce::jmax (0.0, (double) offsetMs);
     updateBlockTime (numSamples);
 
     const bool seqOn    = raw.seqOn->load() > 0.5f;
@@ -703,6 +736,7 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     // grace notes are looked for this far ahead: the longest flam spacing, but never more than half a step
     const double graceLook16 = juce::jmin (0.45, FlamStyle::kMaxSpacingMs / 1000.0 * sampleRate * sixteenthsPerSample);
     const auto graceLookSamples = (juce::int64) std::floor (graceLook16 / sixteenthsPerSample);
+    const double ahead16 = (double) aheadSamples * sixteenthsPerSample;   // negative PORT DELAY, in 16ths
     if (isStandalone() && ! hostTransport && playing) internalPpq += numSamples * sixteenthsPerSample / 4.0;
 
     // ---- pattern selector: while playing, a new slot waits until the pattern is back at step 1
@@ -730,16 +764,29 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         if (wasPlaying)
         {
             flushNoteOffs (0);
-            if (clockOut && directOut.isOpen()) directOut.push (juce::MidiMessage::midiStop(), blockStartMs + offsetMs);
+            if (clockOut && directOut.isOpen()) directOut.push (juce::MidiMessage::midiStop(), blockStartMs + aheadMsPort);
         }
         wasPlaying = false;
         clock.stop();
         graceClock.stop();
         numSched = 0;
+        numHeld = 0;
         playStep = -1;
+        skipSteps = skipGrace = 0;
+        lastFiredStep = lastGraceStep = LLONG_MIN;
     }
 
     const double q0 = ppq * 4.0;   // position in 16ths at the block start
+
+    // ---- the song jumped back (a loop) while the clocks were running ahead of it
+    if (playing && wasPlaying && q0 < lastQEnd - 1e-6)
+    {
+        skipSteps = lastFiredStep == LLONG_MIN ? 0 : (int) juce::jlimit (0LL, 64LL, lastFiredStep - clock.firstAt (lastQEnd) + 1);
+        skipGrace = lastGraceStep == LLONG_MIN ? 0 : (int) juce::jlimit (0LL, 64LL, lastGraceStep - clock.firstAt (lastQEnd + graceLook16) + 1);
+        const auto ticksAhead = juce::jmax ((juce::int64) 0, lastClockTick - ((juce::int64) std::ceil (lastQEnd * 6.0 - 1e-9) - 1));
+        lastClockTick = (juce::int64) std::ceil (q0 * 6.0 - 1e-9) - 1 + ticksAhead;
+    }
+    lastQEnd = q0 + numSamples * sixteenthsPerSample;
 
     // ---- clicks on the track names since the last block: play at the block start, record if REC is on
     for (int r = hitRead.load (std::memory_order_relaxed); r != hitWrite.load (std::memory_order_acquire); r = (r + 1) % kHitQueue)
@@ -753,7 +800,7 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     // ---- start: tell a clock-following drum box where we are
     if (playing && ! wasPlaying && clockOut && directOut.isOpen())
     {
-        const double t = blockStartMs + offsetMs;
+        const double t = blockStartMs + aheadMsPort;
         if (ppq < 0.01) directOut.push (juce::MidiMessage::midiStart(), t);
         else
         {
@@ -770,20 +817,30 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         const double q = q0 + i * sixteenthsPerSample;
         if (playing)
         {
-            const auto grace = graceClock.advance (q + graceLook16);
+            auto grace = graceClock.advance (q + ahead16 + graceLook16, ahead16, q + graceLook16);
+            if (grace >= 0 && skipGrace > 0) { --skipGrace; grace = -1; }
+            if (grace >= 0) lastGraceStep = grace;
             if (grace >= 0 && seqOn) doGrace (wrapStep (grace, len), grace, len, i, graceLookSamples);
             for (int n = 0; n < numSched;)   // grace notes due now
-                if (sched[n].due <= i) { noteOn (sched[n].track, sched[n].velocity, i, sched[n].gate); sched[n] = sched[--numSched]; }
+                if (sched[n].due <= i) { noteOn (sched[n].track, sched[n].velocity, i, sched[n].gate, true); sched[n] = sched[--numSched]; }
                 else ++n;
-            const auto step = clock.advance (q);
-            if (step >= 0) doStep (wrapStep (step, len), step, len, i, seqOn, gateSamples);
+            auto step = clock.advance (q + ahead16, ahead16, q);
+            if (step >= 0 && skipSteps > 0) { --skipSteps; step = -1; }   // already played before the loop
+            if (step >= 0)
+            {
+                lastFiredStep = step;
+                juce::int64 hostAt = -1;   // the host's copy goes at the step's own place in the song
+                if (aheadSamples > 0)
+                    hostAt = juce::jmax ((juce::int64) i, (juce::int64) std::llround ((clock.stepTime (step) - q0) / sixteenthsPerSample));
+                doStep (wrapStep (step, len), step, len, i, seqOn, gateSamples, hostAt);
+            }
             if (clockOut && directOut.isOpen())
             {
-                const auto tick = (juce::int64) std::floor (q * 6.0 + 1e-9);   // 24 per quarter = 6 per 16th
-                if (tick != lastClockTick)
+                const auto tick = (juce::int64) std::floor ((q + ahead16) * 6.0 + 1e-9);   // 24 per quarter = 6 per 16th
+                for (int k = 0; tick > lastClockTick && k < 48; ++k)                          // every tick, none skipped
                 {
-                    lastClockTick = tick;
-                    directOut.push (juce::MidiMessage::midiClock(), blockStartMs + i * 1000.0 / sampleRate + offsetMs);
+                    ++lastClockTick;
+                    directOut.push (juce::MidiMessage::midiClock(), blockStartMs + i * 1000.0 / sampleRate + aheadMsPort);
                 }
             }
         }
@@ -815,13 +872,22 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         for (int p = 0; p < numPending;)
             if (pending[p].sample <= i)
             {
-                emit (juce::MidiMessage::noteOff (pending[p].channel, pending[p].note), i);
+                emit (juce::MidiMessage::noteOff (pending[p].channel, pending[p].note), i, pending[p].fromSeq);
                 pending[p] = pending[--numPending];
             }
             else ++p;
     }
     for (int p = 0; p < numPending; ++p) pending[p].sample -= numSamples;
     for (int n = 0; n < numSched; ++n) sched[n].due -= numSamples;
+    // notes held back for the host (negative PORT DELAY): out when their time comes
+    for (int h = 0; h < numHeld;)
+        if (held[h].due < numSamples)
+        {
+            out.addEvent (juce::MidiMessage (held[h].bytes, held[h].size), (int) juce::jmax ((juce::int64) 0, held[h].due));
+            held[h] = held[--numHeld];
+        }
+        else { held[h].due -= numSamples; ++h; }
+    blockCounter += numSamples;
     if (playing) wasPlaying = true;
 
     midi.swapWith (out);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <climits>
 #include "SeqCore.h"
 #include "DirectMidiOut.h"
 #include "Randomizer.h"
@@ -128,6 +129,9 @@ public:
 
     std::atomic<double> currentBpm { 120.0 };   // the tempo seen in the last audio block
 
+    // tests only: sees everything sent to the MIDI port, with its position in samples since the start
+    std::function<void (const juce::MidiMessage&, juce::int64)> portSpy;
+
 private:
     double sampleRate = 44100.0;
     std::atomic<int> currentSlot { 0 }, pendingSlot { -1 }, playStep { -1 };
@@ -149,7 +153,7 @@ private:
     int lastPatternParam = 0;
 
     // notes waiting for their note-off
-    struct PendingOff { int channel = 0, note = 0; juce::int64 sample = 0; };
+    struct PendingOff { int channel = 0, note = 0; juce::int64 sample = 0; bool fromSeq = false; };
     static constexpr int kMaxPending = 128;
     PendingOff pending[kMaxPending];
     int numPending = 0;
@@ -190,18 +194,33 @@ private:
     juce::MidiBuffer out;
     bool hostOutOn = true;
     float offsetMs = 0.0f;
+    // negative PORT DELAY: the sequencer runs this far ahead of the song; the port gets its notes that
+    // early, and the host's notes are held back by the same amount so they stay in time
+    juce::int64 aheadSamples = 0;
+    double aheadMsPort = 0.0;   // positive part of PORT DELAY (added to port times)
+    struct Held { juce::uint8 bytes[3] {}; int size = 0; juce::int64 due = 0; };
+    static constexpr int kMaxHeld = 1024;
+    Held held[kMaxHeld];
+    int numHeld = 0;
+    // running ahead (negative PORT DELAY, and the flam look-ahead) over a loop: the steps already played
+    // past the loop end are the ones the loop start brings back - skip them once
+    long long lastFiredStep = LLONG_MIN, lastGraceStep = LLONG_MIN;
+    int skipSteps = 0, skipGrace = 0;
+    double lastQEnd = 0.0;          // song position (16ths) the last block ended at
+    juce::int64 blockCounter = 0;   // samples since the plug-in started (tests)
 
     struct Raw
     {
         std::atomic<float>* mute[trossseq::kNumTracks];
+        std::atomic<float>* solo[trossseq::kNumTracks];
         std::atomic<float> *seqOn, *seqLen, *pattern, *rec, *velocity, *accentVel, *gate, *swing,
                            *thru, *hostOut, *clockOut, *offset, *density, *rstyle, *flamTime, *flamLevel;
     } raw {};
 
-    void emit (const juce::MidiMessage& m, int sample);
-    void noteOn (int track, int velocity, int sample, juce::int64 gateSamples);
+    void emit (const juce::MidiMessage& m, int sample, bool fromSeq = false, juce::int64 hostSample = -1);
+    void noteOn (int track, int velocity, int sample, juce::int64 gateSamples, bool fromSeq = false, juce::int64 hostSample = -1);
     void flushNoteOffs (int sample);
-    void doStep (int step, long long absStep, int len, int sample, bool seqOn, juce::int64 gateSamples);
+    void doStep (int step, long long absStep, int len, int sample, bool seqOn, juce::int64 gateSamples, juce::int64 hostSample = -1);
     void doGrace (int step, long long absStep, int len, int sample, juce::int64 lookSamples);
     // grace notes waiting to be played (flam / drag / ruff), sample positions relative to this block
     struct SchedNote { int track = 0, velocity = 0; juce::int64 due = 0, gate = 1; };

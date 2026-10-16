@@ -167,6 +167,8 @@ public:
     // the manual built into the plug-in, written to a temporary file; returns it (or an empty File)
     static juce::File writeManual();
     juce::TextButton manualBtn { "OPEN THE MANUAL" };
+    static constexpr const char* kContact = "ticcoross@gmail.com";
+    juce::HyperlinkButton contactLink { kContact, juce::URL (juce::String ("mailto:") + kContact) };
     void mouseDown (const juce::MouseEvent&) override { setVisible (false); }
     bool keyPressed (const juce::KeyPress& k) override { if (k == juce::KeyPress::escapeKey) { setVisible (false); return true; } return false; }
     juce::Rectangle<float> card() const;

@@ -84,7 +84,7 @@
     <div class="sub">16-STEP MIDI DRUM SEQUENCER &nbsp;·&nbsp; USER MANUAL</div>
   </div>
   <div class="shot"><img src="panel.png" alt="TRoss Seq panel"></div>
-  <div class="meta"><span><b>Version 0.8.0</b> &nbsp;·&nbsp; AU / VST3</span><span>Ticco Ross · 2026</span></div>
+  <div class="meta"><span><b>Version 0.9.0</b> &nbsp;·&nbsp; AU / VST3</span><span>Ticco Ross · 2026</span></div>
 </div>
 
 <!-- ============================================================ contents -->
@@ -97,7 +97,7 @@
     <div><span>4</span><span>The panel at a glance</span></div>
     <div><span>5</span><span>Getting the notes to your drum machine</span></div>
     <div><span>6</span><span>Tracks: names, notes, channels</span></div>
-    <div><span>7</span><span>Mute and momentary solo</span></div>
+    <div><span>7</span><span>Mute and solo</span></div>
     <div><span>8</span><span>Programming patterns</span></div>
     <div><span>9</span><span>Recording from a keyboard or pads</span></div>
     <div><span>10</span><span>The 12 pattern slots</span></div>
@@ -130,7 +130,7 @@
   <h2><span class="n">2</span>Installing</h2>
   <h3>macOS</h3>
   <ol class="steps">
-    <li>Open <b>TRossSeq-0.8.0-macOS.pkg</b> (the manual is in the same download).</li>
+    <li>Open <b>TRossSeq-0.9.0-macOS.pkg</b> (the manual is in the same download).</li>
     <li>The installer isn't signed, so the first time macOS blocks it. Open <b>System Settings → Privacy &amp; Security</b>, scroll down and click <b>Open Anyway</b>, then open the .pkg again.</li>
     <li>Follow the installer. It puts the Audio Unit in <code>/Library/Audio/Plug-Ins/Components</code> and the VST3 in <code>/Library/Audio/Plug-Ins/VST3</code>. Click <b>Customize</b> to install only one of them.</li>
     <li>In Ableton Live, open <b>Settings → Plug-Ins</b>, check that Audio Units (and/or VST3) are switched on, then hold <span class="mod">Option</span> and click <b>Rescan</b>.</li>
@@ -138,7 +138,7 @@
   <p>Logic and other Audio Unit hosts find it under <b>AU Instruments → Ticco Ross</b>; Live and Bitwig under <b>VST3 → Ticco Ross</b>. Section 3 has the setup for each.</p>
 
   <h3>Windows</h3>
-  <p>Run <b>TRossSeq-0.8.0-Windows-Setup.exe</b>. If SmartScreen appears, click <b>More info → Run anyway</b>. The VST3 goes to <code>C:\Program Files\Common Files\VST3</code>. Rescan plug-ins in your DAW.</p>
+  <p>Run <b>TRossSeq-0.9.0-Windows-Setup.exe</b>. If SmartScreen appears, click <b>More info → Run anyway</b>. The VST3 goes to <code>C:\Program Files\Common Files\VST3</code>. Rescan plug-ins in your DAW.</p>
 
   <h3>Linux</h3>
   <p>Unpack the <code>.tar.gz</code> and run <code>./install.sh</code>. It copies the VST3 to <code>~/.vst3</code> and the LV2 to <code>~/.lv2</code>, with no root needed. <code>./uninstall.sh</code> removes them.</p>
@@ -201,16 +201,16 @@
 <!-- ============================================================ panel -->
 <section>
   <h2><span class="n">4</span>The panel at a glance</h2>
-  <figure><img src="panel.png" alt="TRoss Seq panel"><figcaption>TRoss Seq 0.8.0. The window can be resized from its bottom-right corner.</figcaption></figure>
+  <figure><img src="panel.png" alt="TRoss Seq panel"><figcaption>TRoss Seq 0.9.0. The window can be resized from its bottom-right corner.</figcaption></figure>
   <div class="areas">
     <div class="area"><h4><span>A</span>Feel</h4><p>VELOCITY, ACCENT, GATE, SWING, FLAM and FLAM LVL knobs (section 11). Turn a knob to see its value; double-click resets it.</p></div>
     <div class="area"><h4><span>B</span>MIDI output</h4><p>MIDI OUT PORT selector and status line, HOST OUT, CLOCK OUT, MIDI THRU and PORT DELAY (section 5).</p></div>
     <div class="area"><h4><span>C</span>Drum map</h4><p>PRESETS: built-in maps and your own saved maps. The line below shows the current map, with <b>* EDITED</b> when it has changed (section 6).</p></div>
     <div class="area"><h4><span>D</span>Display</h4><p>Shows the playing pattern and what's queued next. In a DAW TRoss Seq follows the host's transport and tempo.</p></div>
-    <div class="area"><h4><span>E</span>Lanes</h4><p>Name strips (play, rename, lock), step pads, and per lane NOTE, CH, M (mute / solo) and LEARN.</p></div>
+    <div class="area"><h4><span>E</span>Lanes</h4><p>Name strips (play, rename, lock), step pads, and per lane NOTE, CH, M (mute), S (solo) and LEARN.</p></div>
     <div class="area"><h4><span>F</span>Patterns &amp; transport</h4><p>12 pattern buttons, LENGTH, RUN, CLEAR, REC and EXPORT MIDI.</p></div>
     <div class="area"><h4><span>G</span>Randomiser</h4><p>DENSITY, RANDOM STYLE, and the RANDOM, FILL and UNDO keys (section 12).</p></div>
-    <div class="area"><h4><span>I</span>About</h4><p>Click the <b>TRoss SEQ</b> logo for the About window: version, build date, which format and DAW it's running in, a quick reference of all mouse and key shortcuts, credits, and an <b>OPEN THE MANUAL</b> button that opens this manual. The manual comes inside the plug-in, so it works offline and always matches the version you have. Click anywhere else (or press Esc) to close it.</p></div>
+    <div class="area"><h4><span>I</span>About</h4><p>Click the <b>TRoss SEQ</b> logo for the About window: version, build date, which format and DAW it's running in, a quick reference of all mouse and key shortcuts, the contact address (<b>ticcoross@gmail.com</b>; click it to write an e-mail), credits, and an <b>OPEN THE MANUAL</b> button that opens this manual. The manual comes inside the plug-in, so it works offline and always matches the version you have. Click anywhere else (or press Esc) to close it.</p></div>
     <div class="area"><h4><span>H</span>HELP</h4><p>Top right. Switches the tips that pop up when you hover a control on or off. Remembered for every copy of TRoss Seq.</p></div>
   </div>
 
@@ -244,7 +244,13 @@
   </table>
 
   <h3>PORT DELAY</h3>
-  <p>Delays everything sent to the port by 0–250 ms, to line the drum box up with the audio coming out of your DAW. Start at about your audio buffer size (in ms) and adjust by ear against a sound in the DAW.</p>
+  <p>Lines the drum box up with the audio coming out of your DAW, from −250 to +250 ms. The knob sits at 0 (no shift); double-click it to go back there.</p>
+  <ul>
+    <li><b>Positive (turn right):</b> everything sent to the port goes out later. Use it when the drum box plays <i>ahead</i> of the DAW's audio, which is the usual case, because the DAW's own sound is delayed by its audio buffer. Start at about your buffer size (in ms).</li>
+    <li><b>Negative (turn left):</b> everything sent to the port goes out earlier. Use it when the drum box is <i>late</i>, for example a slow USB or MIDI interface, a drum box that reacts slowly, or a software drum box whose audio comes back through a long chain. TRoss Seq runs that much ahead of the song for the port, so the hits still land on the beat.</li>
+  </ul>
+  <p>Adjust by ear against a sound in the DAW. PORT DELAY only moves the MIDI OUT PORT (notes and MIDI clock). HOST OUT always stays exactly on the grid, and MIDI THRU and clicks on the name strips are never moved.</p>
+  <p class="note">With a negative delay, the very first step after pressing play can't be sent before you pressed play, so it goes out right away. Over loops, every step is still sent once, and only once.</p>
 
   <h3>CLOCK OUT</h3>
   <p>Sends MIDI clock (24 ticks per quarter note), Start, Stop, Continue and Song Position to the port. Switch it on if your drum box has tempo-synced effects or its own sequencer that should follow along, and set the drum box to sync to external / MIDI clock. Clock goes to the port only.</p>
@@ -297,13 +303,14 @@
   <p>Give each drum box its own MIDI channel and set the lanes' CH to match: for example lanes 1–8 on channel 10 for one box, lanes 9–13 on channel 11 for another. Both boxes can sit on the same MIDI port (daisy-chained through MIDI THRU) or you can use two TRoss Seq instances with a port each.</p>
 
   <section class="flow">
-    <h2><span class="n">7</span>Mute and momentary solo</h2>
+    <h2><span class="n">7</span>Mute and solo</h2>
     <table>
       <tr><th>Action</th><th>Result</th></tr>
       <tr><td>Click <span class="key">M</span></td><td>Mutes the lane (the button lights yellow). Click again to unmute.</td></tr>
-      <tr><td><span class="mod">Shift</span> + hold <span class="key">M</span></td><td><b>Momentary solo.</b> The button turns blue and shows <b>S</b>; only that lane plays, even if it is muted itself, and every other lane goes quiet. Let go of the mouse button and everything is back exactly as it was. Nothing is toggled.</td></tr>
+      <tr><td>Click <span class="key">S</span></td><td><b>Solo.</b> The button lights blue. As soon as any S is lit, only the soloed lanes play, even if they are muted; every other lane goes quiet. Light several S buttons to hear those lanes together. Click again to switch the solo off; when no S is lit, the mutes count again.</td></tr>
+      <tr><td><span class="mod">Shift</span> + hold <span class="key">M</span></td><td><b>Momentary solo.</b> The button turns blue and shows <b>S</b>; only that lane plays, even if it is muted itself, and every other lane goes quiet. Let go of the mouse button and everything is back exactly as it was. Nothing is toggled. It beats the S buttons while you hold it.</td></tr>
     </table>
-    <p>Mutes can be automated in your DAW (<i>Track 1 Mute</i> … <i>Track 13 Mute</i>). They don't affect clicks on the name strips or MIDI THRU.</p>
+    <p>Mutes and solos can be automated in your DAW (<i>Track 1 Mute</i> … <i>Track 13 Mute</i>, <i>Track 1 Solo</i> … <i>Track 13 Solo</i>) and are saved with the project. They don't affect clicks on the name strips or MIDI THRU.</p>
   </section>
 </section>
 
@@ -502,7 +509,8 @@
     <tr><td></td><td>Alt / Option-click: lock</td></tr>
     <tr><td></td><td>Right-click: clear lane, learn…</td></tr>
     <tr><td>ACCENT label</td><td>Right-click: clear accent row</td></tr>
-    <tr><td>M</td><td>Click: mute · Shift + hold: solo</td></tr>
+    <tr><td>M</td><td>Click: mute · Shift + hold: solo while held</td></tr>
+    <tr><td>S</td><td>Click: solo (several at once)</td></tr>
   </table>
   <table>
     <tr><th>Where</th><th>Action</th></tr>
@@ -518,7 +526,7 @@
   </div>
 
   <h3>Automatable parameters</h3>
-  <p>Run · Length · Pattern · Record · Velocity · Accent Velocity · Gate · Swing · Flam Time · Flam Level · Port Delay · MIDI Thru · Host Out · Clock Out · Random Density · Random Style · Track 1–13 Mute</p>
+  <p>Run · Length · Pattern · Record · Velocity · Accent Velocity · Gate · Swing · Flam Time · Flam Level · Port Delay · MIDI Thru · Host Out · Clock Out · Random Density · Random Style · Track 1–13 Mute · Track 1–13 Solo</p>
 </section>
 
 <!-- ============================================================ troubleshooting -->
@@ -526,12 +534,12 @@
   <h2><span class="n">16</span>Troubleshooting</h2>
   <table>
     <tr><th>Problem</th><th>What to check</th></tr>
-    <tr><td>The drum box plays nothing</td><td>Is the song playing and RUN on? Does the MIDI OUT PORT status read CONNECTED? Do the lanes' CH match the channel the drum box listens on (often 10)? Are the notes right for your drum box (PRESETS, LEARN)? Is the lane muted? For a software plug-in, check the routing in section 3 for your DAW.</td></tr>
+    <tr><td>The drum box plays nothing</td><td>Is the song playing and RUN on? Does the MIDI OUT PORT status read CONNECTED? Do the lanes' CH match the channel the drum box listens on (often 10)? Are the notes right for your drum box (PRESETS, LEARN)? Is the lane muted, or is another lane soloed (S lit)? For a software plug-in, check the routing in section 3 for your DAW.</td></tr>
     <tr><td>Every note plays twice</td><td>Both outputs reach the same drum box. Turn HOST OUT off, or set MIDI OUT PORT to NONE.</td></tr>
     <tr><td>One sound doesn't trigger</td><td>That lane's note isn't what the drum box expects. Click LEARN on the lane and hit the pad on the drum box (if it sends MIDI), or look up the note in its manual.</td></tr>
     <tr><td>Port shows COULDN'T OPEN (Windows)</td><td>Most Windows MIDI drivers let only one program use a port. Switch that port off in your DAW's MIDI settings, close other MIDI apps, then pick it again in TRoss Seq.</td></tr>
     <tr><td>Port shows NOT CONNECTED</td><td>The port saved in the project isn't plugged in. Connect it and pick it again, or choose another.</td></tr>
-    <tr><td>Drum box is early or late against the DAW</td><td>Adjust PORT DELAY until they line up.</td></tr>
+    <tr><td>Drum box is early or late against the DAW</td><td>Adjust PORT DELAY until they line up: turn it right if the drum box is early, left (negative) if it's late.</td></tr>
     <tr><td>Drum box's tempo / effects don't follow</td><td>Switch CLOCK OUT on and set the drum box to sync to external MIDI clock.</td></tr>
     <tr><td>RANDOM doesn't change anything at once</td><td>While playing, the result waits for step 1; the display shows <span class="lcd">PAT 1 &gt; RND</span>. Check the lane isn't locked (padlock).</td></tr>
     <tr><td>Keyboard doesn't play or record</td><td>Arm the TRoss Seq track (in Live you can also set its monitor to In). MIDI THRU must be on to pass it to the drum box; REC must be on and the song playing to record.</td></tr>

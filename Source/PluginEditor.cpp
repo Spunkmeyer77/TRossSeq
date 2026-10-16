@@ -78,7 +78,7 @@ constexpr int kRndY = kSeqY + 212;   // randomiser block, under the pattern butt
 constexpr float kGridX = 104.0f, kGridR = 690.0f, kColGap = 5.0f, kPadTop = 46.0f, kRowPitch = 20.0f, kPadH = 16.0f;
 constexpr float kColW = (kGridR - kGridX - 15 * kColGap) / 16.0f;
 constexpr int kNameX = 18, kNameW = 78;
-constexpr int kNoteX = 700, kNoteW = 54, kChanX = 760, kChanW = 32, kMuteX = 798, kMuteW = 24, kLearnX = 828, kLearnW = 44;
+constexpr int kNoteX = 700, kNoteW = 54, kChanX = 760, kChanW = 32, kMuteX = 796, kMuteW = 22, kSoloX = 820, kSoloW = 22, kLearnX = 848, kLearnW = 44;
 int rowY (int row) { return kSeqY + (int) kPadTop + row * (int) kRowPitch; }
 } // namespace
 
@@ -270,7 +270,10 @@ void StepGrid::paint (juce::Graphics& g)
     g.drawText ("STEP", kMargin, 12, 46, 12, juce::Justification::centredLeft);
     g.drawText ("NOTE", kNoteX, 12, kNoteW, 12, juce::Justification::centred);
     g.drawText ("CH", kChanX, 12, kChanW, 12, juce::Justification::centred);
-    g.drawText ("MUTE", kMuteX - 4, 12, kMuteW + 8, 12, juce::Justification::centred);
+    g.setFont (font (8.0f, false, 0.0f));   // tighter: two narrow columns
+    g.drawText ("MUTE", kMuteX - 2, 12, kMuteW + 3, 12, juce::Justification::centred, false);
+    g.drawText ("SOLO", kSoloX - 1, 12, kSoloW + 3, 12, juce::Justification::centred, false);
+    g.setFont (font (9.0f, false, 0.2f));
     g.drawText ("LEARN", kLearnX, 12, kLearnW, 12, juce::Justification::centred);
 
     for (int s = 0; s < kNumSteps; ++s)
@@ -502,8 +505,12 @@ void NameStrip::paint (juce::Graphics& g)
     g.setColour (bg);
     g.fillRoundedRectangle (r, 2.0f);
     const int solo = proc.momentarySolo.load();
-    const bool silenced = (solo >= 0 && solo != track)   // another track is held solo
-                          || proc.getTrackName (track) == "---";   // spare lane in this map
+    bool anyS = false;
+    for (int i = 0; i < kNumTracks; ++i) anyS |= proc.apvts.getRawParameterValue ("solo" + juce::String (i + 1))->load() > 0.5f;
+    const bool mySolo = proc.apvts.getRawParameterValue ("solo" + juce::String (track + 1))->load() > 0.5f;
+    const bool silenced = (solo >= 0 && solo != track)            // another track is held solo
+                          || (solo < 0 && anyS && ! mySolo)       // S buttons lit, not this lane's
+                          || proc.getTrackName (track) == "---";  // spare lane in this map
     g.setColour ((bg.getPerceivedBrightness() > 0.5f ? col::stripBg : col::stripText).withAlpha (silenced ? 0.3f : 1.0f));
     g.setFont (font (10.0f, true, 0.1f));
     g.drawText (proc.getTrackName (track), getLocalBounds(), juce::Justification::centred);
@@ -871,7 +878,8 @@ TrossSeqEditor::TrossSeqEditor (TrossSeqProcessor& p)
     toggle ("hostout",  "HOST OUT",  64, "Also send the notes to the host's MIDI out (route it to a MIDI track in your DAW)");
     toggle ("clockout", "CLOCK OUT", 83, "Send MIDI clock, start and stop to the MIDI OUT port, so the drum box follows the tempo");
     toggle ("thru",     "MIDI THRU", 102, "Pass incoming MIDI (your keyboard) through to the outputs");
-    addKnob ("offset", { 690, 94 }, 34).setTooltip ("Delays everything sent to the MIDI OUT port, to line the drum box up with the audio");
+    addKnob ("offset", { 690, 94 }, 34).setTooltip ("Lines the drum box up with the audio. Turn right (+): the MIDI OUT port is sent later. "
+                                                   "Turn left (-): the port is sent earlier, for a drum box that's late. HOST OUT stays on the grid");
 
     mapBtn.getProperties().set ("style", "key");
     mapBtn.setBounds (742, 76, 110, 24);
@@ -941,6 +949,17 @@ TrossSeqEditor::TrossSeqEditor (TrossSeqProcessor& p)
         content.addAndMakeVisible (*mute);
         bAtts.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, "mute" + juce::String (t + 1), *mute));
         buttons.push_back (std::move (mute));
+
+        auto soloB = std::make_unique<juce::TextButton> ("S");
+        soloB->setClickingTogglesState (true);
+        soloB->getProperties().set ("style", "rubberDark");
+        soloB->getProperties().set ("onColour", (juce::int64) col::soloOn.getARGB());
+        soloB->setBounds (kSoloX, y + 1, kSoloW, (int) kPadH - 1);
+        soloB->setTooltip ("Solo: only the lanes with S lit play (even muted ones). Light several to hear them together");
+        soloB->setComponentID ("solo" + juce::String (t + 1));
+        content.addAndMakeVisible (*soloB);
+        bAtts.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, "solo" + juce::String (t + 1), *soloB));
+        buttons.push_back (std::move (soloB));
 
         auto learn = std::make_unique<juce::TextButton> ("LEARN");
         learn->getProperties().set ("style", "rubberDark");
@@ -1229,6 +1248,10 @@ AboutOverlay::AboutOverlay (TrossSeqProcessor& p) : proc (p)
     manualBtn.setTooltip ("Opens the TRoss Seq manual (PDF) that comes inside the plug-in");
     manualBtn.onClick = [] { if (auto f = writeManual(); f.existsAsFile()) f.startAsProcess(); };
     addAndMakeVisible (manualBtn);
+    contactLink.setFont (font (11.0f, true), false, juce::Justification::centredLeft);
+    contactLink.setColour (juce::HyperlinkButton::textColourId, col::ink);
+    contactLink.setTooltip (juce::String ("Write to ") + kContact);
+    addAndMakeVisible (contactLink);
 }
 
 juce::File AboutOverlay::writeManual()
@@ -1247,6 +1270,7 @@ void AboutOverlay::resized()
 {
     const auto c = card();
     manualBtn.setBounds (juce::Rectangle<float> (c.getRight() - 26.0f - 190.0f, c.getY() + 300.0f, 190.0f, 28.0f).toNearestInt());
+    contactLink.setBounds (juce::Rectangle<float> (c.getRight() - 26.0f - 190.0f, c.getY() + 84.0f, 190.0f, 18.0f).toNearestInt());
 }
 
 juce::Rectangle<float> AboutOverlay::card() const
@@ -1320,6 +1344,7 @@ void AboutOverlay::paint (juce::Graphics& g)
     infoLine ("VERSION", "v" JucePlugin_VersionString, c.getY() + 26.0f);
     infoLine ("BUILT", TSEQ_BUILD_DATE, c.getY() + 46.0f);
     infoLine ("RUNNING AS", formatAndHost (proc), c.getY() + 66.0f);
+    infoLine ("CONTACT", {}, c.getY() + 86.0f);   // the address is the link on top
 
     // ---- Quick reference
     const float by = c.getY() + headerH + 18.0f;
@@ -1343,7 +1368,7 @@ void AboutOverlay::paint (juce::Graphics& g)
     static const Row right[] = {
         { "Right-click name", "clear lane, learn, randomise lane" },
         { "Right-click ACCENT", "clear the accent row" },
-        { "Click M", "mute" },
+        { "Click M / S", "mute / solo (several S together)" },
         { "Shift + hold M", "solo while held" },
         { "Shift-click RANDOM", "variation of this pattern" },
         { "Right-click pattern", "copy, clear, chain options" },
@@ -1561,7 +1586,10 @@ void TrossSeqEditor::timerCallback()
     else if (learn >= 0)   // blink while waiting for a note
         learnBtn[learn]->setToggleState ((juce::Time::getMillisecondCounter() / 250) % 2 == 0, juce::dontSendNotification);
 
-    const int nv = proc.getNameVersion(), solo = proc.momentarySolo.load();
+    int solo = proc.momentarySolo.load() + 1;   // + which S buttons are lit, so the strips dim/undim
+    for (int i = 0; i < kNumTracks; ++i)
+        if (proc.apvts.getRawParameterValue ("solo" + juce::String (i + 1))->load() > 0.5f) solo += 32 << i;
+    const int nv = proc.getNameVersion();
     const auto now = juce::Time::getMillisecondCounter();
     for (int t = 0; t < kNumTracks; ++t)
         if (nv != lastNameVersion || solo != lastSolo || now - strips[(size_t) t]->clickTime < 240) strips[(size_t) t]->repaint();

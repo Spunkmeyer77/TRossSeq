@@ -5,6 +5,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 namespace trossseq
 {
@@ -197,6 +198,14 @@ struct StepClock
 
     void stop() { running = false; }
 
+    // the first step at or after `pos`
+    long long firstAt (double pos) const
+    {
+        long long n = (long long) std::floor (pos) - 1;
+        while (stepTime (n) < pos - 1e-7) ++n;
+        return n;
+    }
+
     // the transport is at `pos`; the next step to fire is the first one at or after it
     void syncTo (double pos)
     {
@@ -208,11 +217,14 @@ struct StepClock
 
     // Called once per sample (or per position): returns the step that fires at `pos`, or -1.
     // Handles loops and jumps by re-syncing when the position moves backwards or skips ahead.
-    long long advance (double pos)
+    // `slack`: how far ahead of the song the clock may run (negative port delay) before a jump is assumed.
+    // `resyncAt`: where to pick up after a jump (the song position, so no step is skipped; NaN = pos).
+    long long advance (double pos, double slack = 0.0, double resyncAt = std::numeric_limits<double>::quiet_NaN())
     {
-        if (! running) syncTo (pos);
+        const double at = std::isnan (resyncAt) ? pos : resyncAt;
+        if (! running) syncTo (at);
         const double prev = stepTime (nextStep - 1);
-        if (pos < prev - 1e-6 || pos > stepTime (nextStep) + 1.0) syncTo (pos);   // jumped
+        if (pos < prev - 1e-6 || pos > stepTime (nextStep) + 1.0 + slack) syncTo (at);   // jumped
         if (stepTime (nextStep) <= pos + 1e-9) return nextStep++;
         return -1;
     }

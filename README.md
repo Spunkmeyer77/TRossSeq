@@ -29,8 +29,9 @@ The manual's chapter 3 has the full steps.
 **Windows:** most classic Windows MIDI drivers let only one program use a port at a time. If the port shows
 an error, disable it in your DAW's MIDI settings so TRoss Seq can open it.
 
-**PORT DELAY** shifts everything sent to the port later (0–250 ms), to line the drum box up with your
-DAW's audio. Start at about the size of your audio buffer and adjust by ear.
+**PORT DELAY** shifts everything sent to the port from −250 to +250 ms, to line the drum box up with your
+DAW's audio. Positive sends it later (start at about the size of your audio buffer); negative sends it
+earlier, for a drum box that's late. HOST OUT always stays on the grid.
 
 **CLOCK OUT** sends MIDI clock (24 per quarter), start / continue / stop and song position to the
 port, so drum boxes with their own sequencers or tempo-synced effects follow along.
@@ -47,6 +48,7 @@ port, so drum boxes with their own sequencers or tempo-synced effects follow alo
 | MIDI THRU | Passes your keyboard / pad controller through to the outputs, so you can play the drum box live |
 | Track name strips | Click to play that drum now (Cmd/Ctrl-click = accent); the strip flashes only for your clicks. With REC on while the song plays, the hit is recorded. **Shift-click** to rename, Alt-click to lock, right-click for MIDI learn and to **clear the lane** (this pattern or all 12, steps or only flams) |
 | NOTE / CH | Each track's MIDI note and channel: drag the red read-outs up or down. Note names use Ableton's naming (C1 = 36) |
+| S | Click: solo. While any S is lit only the soloed tracks play (even muted ones); light several to hear them together |
 | M | Click: mutes the track. **Shift + hold:** solos the track for as long as you hold the mouse button (it plays even if it's muted, every other track goes quiet). Let go and everything is back as it was; nothing gets toggled |
 | LEARN | Click, then hit a key or pad: the track takes that note and channel |
 | PRESETS | Drum map library: built-in maps (General MIDI; hardware: Roland TR-06, TR-08, TR-09, TR-8 / TR-8S, Korg volca beats; software: UVI Prime 8, AudioRealism ADM), your own saved maps (Save map as…, Save, Rename, Delete, Show maps folder: `Documents/TRoss Seq/Maps`), all lanes on one channel, and save as default. The panel shows the current map and marks it * EDITED after changes |
@@ -120,5 +122,5 @@ cmake -B build -DTSEQ_BUILD_TESTS=ON && cmake --build build --target TRossSeqTes
 ```
 
 Covers note timing against the host transport, velocity and accent, gate, swing, pattern queueing, LENGTH,
-recording, MIDI learn, mute, Shift-held solo, all 13 lanes, the randomiser (12 styles, density, locks, mutate, fill, undo), flams, the drum map library, thru / host out, loops, stop flushing, presets, MIDI export, state save/restore,
+recording, MIDI learn, mute, solo buttons, Shift-held solo, negative port delay (early port, host on the grid, loops), all 13 lanes, the randomiser (12 styles, density, locks, mutate, fill, undo), flams, the drum map library, thru / host out, loops, stop flushing, presets, MIDI export, state save/restore,
 and an editor snapshot.
