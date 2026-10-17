@@ -226,6 +226,13 @@ private:
     juce::TextButton clearBtn { "CLEAR" }, mapBtn { "PRESETS" };
     juce::TextButton randomBtn { "RANDOM" }, fillBtn { "FILL" }, undoBtn { "UNDO" };
     juce::ComboBox styleBox;
+    // STUTTER: held = on (momentary), plus its slice length and ROLL
+public:
+    juce::TextButton stutterBtn { "STUTTER" };
+    juce::ComboBox stutRateBox;
+private:
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> stutRateAtt;
+    bool stutterHeld = false, lastStutter = false;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> styleAtt;
     bool lastPendingRnd = false;
     int lastLockVersion = -1;

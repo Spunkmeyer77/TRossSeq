@@ -834,6 +834,59 @@ int main (int argc, char** argv)
         check (hostK == std::vector<juce::int64> { 0, 24000, 48000, 72000 }, "positive PORT DELAY: host notes untouched");
     }
 
+    // 14g. STUTTER: hold = the slice under the play position repeats; let go = back where the song is
+    {
+        TrossSeqProcessor st;
+        FakeHost h5; st.setPlayHead (&h5);
+        st.setRateAndBufferSizeDetails (sr, block); st.prepareToPlay (sr, block);
+        st.patterns.clear (0);
+        for (int x = 0; x < 16; ++x) st.patterns.setCell (0, 6, x, true);   // CH on every step: a clock to count with
+        st.patterns.setCell (0, 1, 4, true);                                // BD on step 5
+        st.patterns.setCell (0, 2, 5, true);                                // SD on step 6
+        st.patterns.setCell (0, 1, 12, true);                               // BD on step 13
+        auto sp = [&] (const char* id, float v) { auto* q = st.apvts.getParameter (id); q->setValueNotifyingHost (q->convertTo0to1 (v)); };
+        juce::AudioBuffer<float> b5 (2, block);
+        std::vector<std::pair<juce::int64, int>> notes;   // (time, note)
+        juce::int64 t = 0;
+        auto runS = [&] (int blocks, std::function<void (juce::int64)> at = {})
+        {
+            for (int k = 0; k < blocks; ++k)
+            {
+                if (at) at (t);
+                juce::MidiBuffer m; st.processBlock (b5, m);
+                for (const auto md : m) if (md.getMessage().isNoteOn()) notes.push_back ({ t + md.samplePosition, md.getMessage().getNoteNumber() });
+                h5.ppq += block / sr * h5.bpm / 60.0;
+                t += block;
+            }
+        };
+        check (st.apvts.getParameter ("stutter") != nullptr && st.apvts.getParameter ("sturate") != nullptr && st.apvts.getParameter ("sturoll") != nullptr,
+               "STUTTER, Stutter Length and Stutter Roll parameters");
+        // 1/8 (2 steps), pressed on step 5 (sample 24000), let go on step 13 (72000)
+        sp ("sturate", 2.0f);
+        h5.playing = true; h5.ppq = 0.0;
+        runS (200, [&] (juce::int64 now) { if (now == 24000) sp ("stutter", 1.0f); if (now == 72000) sp ("stutter", 0.0f); });
+        std::vector<juce::int64> bd, sd, ch;
+        for (auto& n : notes) { if (n.second == 36) bd.push_back (n.first); if (n.second == 38) sd.push_back (n.first); if (n.second == 42) ch.push_back (n.first); }
+        auto list = [] (const std::vector<juce::int64>& v) { juce::String r; for (auto x : v) r << (int) (x / 6000) << " "; return r; };
+        check (bd == std::vector<juce::int64> { 24000, 36000, 48000, 60000, 72000 } && sd == std::vector<juce::int64> { 30000, 42000, 54000, 66000 },
+               "1/8 stutter on steps 5-6 repeats them 4 times, then step 13 plays on time (BD at steps " + list (bd) + "/ SD " + list (sd) + ")");
+        check (ch.size() == 16, "the hi-hat keeps every 16th through the stutter (" + juce::String ((int) ch.size()) + ")");
+        // ROLL with 1/4: 4,4 then 2,2 then 1,1 then 1/32 ... hits get closer together
+        notes.clear(); t = 0;
+        h5.playing = false; { juce::MidiBuffer m; st.processBlock (b5, m); }
+        sp ("sturate", 1.0f); sp ("sturoll", 1.0f);
+        h5.playing = true; h5.ppq = 0.0;
+        runS (260, [&] (juce::int64 now) { if (now == 24000) sp ("stutter", 1.0f); if (now == 120000) sp ("stutter", 0.0f); });
+        bd.clear(); for (auto& n : notes) if (n.second == 36 && n.first >= 24000) bd.push_back (n.first);
+        bool closer = bd.size() >= 6;
+        for (size_t k = 2; closer && k < bd.size(); ++k) closer &= (bd[k] - bd[k - 1]) <= (bd[k - 1] - bd[k - 2]);
+        check (closer && bd.size() >= 6 && bd[1] - bd[0] == 24000 && bd.back() - bd[bd.size() - 2] == 3000,
+               "ROLL: the repeats get shorter, down to 1/32 (" + juce::String ((int) bd.size()) + " kicks)");
+        h5.playing = false; { juce::MidiBuffer m; st.processBlock (b5, m); }
+        check (! st.isStuttering(), "stopping ends the stutter");
+        sp ("sturoll", 0.0f);
+    }
+
     // 14c. drum map library
     {
         auto dir = outDir.getChildFile ("maps");
@@ -1063,6 +1116,15 @@ int main (int argc, char** argv)
             check (on && proc.apvts.getRawParameterValue ("solo4")->load() < 0.5f, "S on: lane 4 soloed, S off: not");
             solos[1]->setToggleState (true, juce::sendNotificationSync);   // leave one lit for the snapshot
         }
+    }
+    // STUTTER button: on while held, off on release
+    if (auto* te = dynamic_cast<TrossSeqEditor*> (ed.get()))
+    {
+        te->stutterBtn.setState (juce::Button::buttonDown);
+        const bool on = proc.apvts.getRawParameterValue ("stutter")->load() > 0.5f;
+        te->stutterBtn.setState (juce::Button::buttonNormal);
+        check (on && proc.apvts.getRawParameterValue ("stutter")->load() < 0.5f && te->stutRateBox.getText() == "1/8",
+               "STUTTER button: on while held, off when let go; length 1/8 by default");
     }
     std::printf ("editor size %d x %d\n", ed->getWidth(), ed->getHeight());
     juce::PNGImageFormat png;

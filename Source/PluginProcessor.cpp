@@ -48,6 +48,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TrossSeqProcessor::createLay
         l.add (onOff ("mute" + juce::String (t + 1), "Track " + juce::String (t + 1) + " Mute", false));
     for (int t = 0; t < kNumTracks; ++t)
         l.add (onOff ("solo" + juce::String (t + 1), "Track " + juce::String (t + 1) + " Solo", false));
+    l.add (onOff ("stutter", "Stutter", false));
+    l.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "sturate", 1 }, "Stutter Length",
+                                                         juce::StringArray { "1/2 bar", "1/4", "1/8", "1/16", "1/32" }, 2));
+    l.add (onOff ("sturoll", "Stutter Roll", false));
     return l;
 }
 
@@ -61,6 +65,7 @@ TrossSeqProcessor::TrossSeqProcessor()
     raw.velocity = p ("velocity"); raw.accentVel = p ("accvel"); raw.gate = p ("gate"); raw.swing = p ("swing");
     raw.thru = p ("thru"); raw.hostOut = p ("hostout"); raw.clockOut = p ("clockout"); raw.offset = p ("offset");
     raw.density = p ("density"); raw.rstyle = p ("rstyle"); raw.flamTime = p ("flamtime"); raw.flamLevel = p ("flamlevel");
+    raw.stutter = p ("stutter"); raw.stutRate = p ("sturate"); raw.stutRoll = p ("sturoll");
 
     applyPreset (0);
 
@@ -618,8 +623,19 @@ void TrossSeqProcessor::doStep (int step, long long absStep, int len, int sample
         }
         applyStaged();   // a randomised pattern takes over on step 1
     }
-    playStep = step;
+    if (! stutActive) playStep = step;   // while stuttering the LEDs follow the repeated steps
     if (! seqOn) return;
+    playNotes (step, sample, gateSamples, hostSample);
+}
+
+double TrossSeqProcessor::stutterLength (int i)
+{
+    static const double len[5] = { 8.0, 4.0, 2.0, 1.0, 0.5 };
+    return len[juce::jlimit (0, 4, i)];
+}
+
+void TrossSeqProcessor::playNotes (int step, int sample, juce::int64 gateSamples, juce::int64 hostSample)
+{
     const int slot = currentSlot.load();
     const bool accent = patterns.cell (slot, 0, step);
     const int vel = (int) (accent ? raw.accentVel->load() : raw.velocity->load());
@@ -772,6 +788,7 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         numSched = 0;
         numHeld = 0;
         playStep = -1;
+        stutActive = false; stutShown = false;
         skipSteps = skipGrace = 0;
         lastFiredStep = lastGraceStep = LLONG_MIN;
     }
@@ -817,10 +834,24 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         const double q = q0 + i * sixteenthsPerSample;
         if (playing)
         {
+            // ---- STUTTER: from the press, the slice it falls in plays over and over (snapped to the grid); the song
+            // goes on underneath, so letting go lands exactly where the DAW is. ROLL halves the slice every 2 repeats.
+            const bool stutWanted = raw.stutter->load() > 0.5f;
+            const double qa = q + ahead16;
+            if (stutWanted && ! stutActive)
+            {
+                stutActive = true;
+                stutLen = stutterLength ((int) raw.stutRate->load());
+                stutStart = stutSlice = std::floor (qa / stutLen + 1e-9) * stutLen;
+                stutLastO = qa - stutSlice - 1e-6;   // steps before the press already played; one right on it plays now
+                stutCount = 0;
+            }
+            else if (! stutWanted && stutActive) stutActive = false;
+            stutShown = stutActive;
             auto grace = graceClock.advance (q + ahead16 + graceLook16, ahead16, q + graceLook16);
             if (grace >= 0 && skipGrace > 0) { --skipGrace; grace = -1; }
             if (grace >= 0) lastGraceStep = grace;
-            if (grace >= 0 && seqOn) doGrace (wrapStep (grace, len), grace, len, i, graceLookSamples);
+            if (grace >= 0 && seqOn && ! stutActive) doGrace (wrapStep (grace, len), grace, len, i, graceLookSamples);
             for (int n = 0; n < numSched;)   // grace notes due now
                 if (sched[n].due <= i) { noteOn (sched[n].track, sched[n].velocity, i, sched[n].gate, true); sched[n] = sched[--numSched]; }
                 else ++n;
@@ -832,7 +863,27 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
                 juce::int64 hostAt = -1;   // the host's copy goes at the step's own place in the song
                 if (aheadSamples > 0)
                     hostAt = juce::jmax ((juce::int64) i, (juce::int64) std::llround ((clock.stepTime (step) - q0) / sixteenthsPerSample));
-                doStep (wrapStep (step, len), step, len, i, seqOn, gateSamples, hostAt);
+                doStep (wrapStep (step, len), step, len, i, seqOn && ! stutActive, gateSamples, hostAt);
+            }
+            if (stutActive)
+            {
+                while (qa >= stutSlice + stutLen - 1e-9)
+                {
+                    stutSlice += stutLen;
+                    stutLastO = -1e-6;   // a new repeat: its first step plays again
+                    if (++stutCount % 2 == 0 && raw.stutRoll->load() > 0.5f && stutLen > 0.5 + 1e-9) stutLen *= 0.5;
+                }
+                const double o = qa - stutSlice;
+                for (long long n = (long long) std::floor (stutStart); clock.stepTime (n) < stutStart + stutLen - 1e-9; ++n)
+                {
+                    const double at = clock.stepTime (n) - stutStart;
+                    if (at >= -1e-9 && at > stutLastO + 1e-12 && at <= o + 1e-9)
+                    {
+                        playStep = wrapStep (n, len);
+                        if (seqOn) playNotes (wrapStep (n, len), i, juce::jmin (gateSamples, (juce::int64) (stutLen * samplesPerStep * 0.9)), -1);
+                    }
+                }
+                stutLastO = o;
             }
             if (clockOut && directOut.isOpen())
             {

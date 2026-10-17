@@ -97,7 +97,7 @@
     <div><span>4</span><span>The panel at a glance</span></div>
     <div><span>5</span><span>Getting the notes to your drum machine</span></div>
     <div><span>6</span><span>Tracks: names, notes, channels</span></div>
-    <div><span>7</span><span>Mute and solo</span></div>
+    <div><span>7</span><span>Mute, solo and stutter</span></div>
     <div><span>8</span><span>Programming patterns</span></div>
     <div><span>9</span><span>Recording from a keyboard or pads</span></div>
     <div><span>10</span><span>The 12 pattern slots</span></div>
@@ -303,7 +303,7 @@
   <p>Give each drum box its own MIDI channel and set the lanes' CH to match: for example lanes 1–8 on channel 10 for one box, lanes 9–13 on channel 11 for another. Both boxes can sit on the same MIDI port (daisy-chained through MIDI THRU) or you can use two TRoss Seq instances with a port each.</p>
 
   <section class="flow">
-    <h2><span class="n">7</span>Mute and solo</h2>
+    <h2><span class="n">7</span>Mute, solo and stutter</h2>
     <table>
       <tr><th>Action</th><th>Result</th></tr>
       <tr><td>Click <span class="key">M</span></td><td>Mutes the lane (the button lights yellow). Click again to unmute.</td></tr>
@@ -311,6 +311,16 @@
       <tr><td><span class="mod">Shift</span> + hold <span class="key">M</span></td><td><b>Momentary solo.</b> The button turns blue and shows <b>S</b>; only that lane plays, even if it is muted itself, and every other lane goes quiet. Let go of the mouse button and everything is back exactly as it was. Nothing is toggled. It beats the S buttons while you hold it.</td></tr>
     </table>
     <p>Mutes and solos can be automated in your DAW (<i>Track 1 Mute</i> … <i>Track 13 Mute</i>, <i>Track 1 Solo</i> … <i>Track 13 Solo</i>) and are saved with the project. They don't affect clicks on the name strips or MIDI THRU.</p>
+    <h3>STUTTER (beat repeat)</h3>
+    <p>A live effect at the top of the panel, next to the TRoss SEQ name. <b>Hold STUTTER</b> and the slice of the pattern you're on plays over and over. <b>Let go</b> and TRoss Seq is straight back where the song is: the song keeps running underneath, so you never fall out of time with the DAW.</p>
+    <table>
+      <tr><th>Control</th><th>What it does</th></tr>
+      <tr><td><b>STUTTER</b></td><td>Hold with the mouse: the effect is on while you hold it (the LED lights). Nothing in the pattern changes.</td></tr>
+      <tr><td><b>Length</b> (1/2 BAR … 1/32)</td><td>How long the repeated slice is. The slice starts on the grid at the moment you press: with 1/8, pressing on step 5 repeats steps 5 and 6. 1/32 repeats half a step, for machine-gun rolls.</td></tr>
+      <tr><td><b>ROLL</b></td><td>The slice gets shorter every two repeats (for example 1/4, 1/4, 1/8, 1/8, 1/16, 1/16, 1/32 …): the classic build-up into a drop. Let go on the drop.</td></tr>
+    </table>
+    <p class="note"><b>Play it from a controller.</b> STUTTER, Stutter Length and Stutter Roll are DAW parameters. Map a key or pad of your MIDI controller to <i>Stutter</i> in your DAW (in Live: MIDI Map mode; in Logic: Learn in Smart Controls; in Bitwig: right-click the parameter → Learn controller assignment), or draw it as automation to write stutters into an arrangement.</p>
+    <p>Mutes and solos work during a stutter. Flams are left out of the repeats, so fast stutters stay clean. MIDI clock keeps running at the song's pace, so a drum box following the clock stays in time.</p>
   </section>
 </section>
 
@@ -513,6 +523,7 @@
     <tr><td></td><td>Alt / Option-click: lock</td></tr>
     <tr><td></td><td>Right-click: clear lane, learn…</td></tr>
     <tr><td>ACCENT label</td><td>Right-click: clear accent row</td></tr>
+    <tr><td>STUTTER</td><td>Hold: beat repeat · length 1/2 bar … 1/32 · ROLL: shorter every two repeats</td></tr>
     <tr><td>M</td><td>Click: mute · Shift + hold: solo while held</td></tr>
     <tr><td>S</td><td>Click: solo (several at once)</td></tr>
   </table>
@@ -530,7 +541,7 @@
   </div>
 
   <h3>Automatable parameters</h3>
-  <p>Run · Length · Pattern · Record · Velocity · Accent Velocity · Gate · Swing · Flam Time · Flam Level · Port Delay · MIDI Thru · Host Out · Clock Out · Random Density · Random Style · Track 1–13 Mute · Track 1–13 Solo</p>
+  <p>Run · Length · Pattern · Record · Velocity · Accent Velocity · Gate · Swing · Flam Time · Flam Level · Port Delay · MIDI Thru · Host Out · Clock Out · Random Density · Random Style · Track 1–13 Mute · Track 1–13 Solo · Stutter · Stutter Length · Stutter Roll</p>
 </section>
 
 <!-- ============================================================ troubleshooting -->

@@ -214,7 +214,7 @@ private:
         std::atomic<float>* mute[trossseq::kNumTracks];
         std::atomic<float>* solo[trossseq::kNumTracks];
         std::atomic<float> *seqOn, *seqLen, *pattern, *rec, *velocity, *accentVel, *gate, *swing,
-                           *thru, *hostOut, *clockOut, *offset, *density, *rstyle, *flamTime, *flamLevel;
+                           *thru, *hostOut, *clockOut, *offset, *density, *rstyle, *flamTime, *flamLevel, *stutter, *stutRate, *stutRoll;
     } raw {};
 
     void emit (const juce::MidiMessage& m, int sample, bool fromSeq = false, juce::int64 hostSample = -1);
@@ -222,6 +222,16 @@ private:
     void flushNoteOffs (int sample);
     void doStep (int step, long long absStep, int len, int sample, bool seqOn, juce::int64 gateSamples, juce::int64 hostSample = -1);
     void doGrace (int step, long long absStep, int len, int sample, juce::int64 lookSamples);
+    void playNotes (int step, int sample, juce::int64 gateSamples, juce::int64 hostSample);
+    // STUTTER (beat repeat): while held, the slice that starts at stutStart (in 16ths) plays over and over
+    bool stutActive = false;
+    double stutStart = 0.0, stutLen = 2.0, stutSlice = 0.0, stutLastO = 0.0;
+    int stutCount = 0;
+public:
+    static double stutterLength (int rateIndex);   // 0 = 1/2 bar ... 4 = 1/32, in 16ths
+    bool isStuttering() const { return stutShown.load(); }
+private:
+    std::atomic<bool> stutShown { false };
     // grace notes waiting to be played (flam / drag / ruff), sample positions relative to this block
     struct SchedNote { int track = 0, velocity = 0; juce::int64 due = 0, gate = 1; };
     static constexpr int kMaxSched = 128;

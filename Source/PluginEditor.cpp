@@ -881,6 +881,35 @@ TrossSeqEditor::TrossSeqEditor (TrossSeqProcessor& p)
     addKnob ("offset", { 690, 94 }, 34).setTooltip ("Lines the drum box up with the audio. Turn right (+): the MIDI OUT port is sent later. "
                                                    "Turn left (-): the port is sent earlier, for a drum box that's late. HOST OUT stays on the grid");
 
+    // ---- STUTTER (title row): hold the button, the slice under the play position repeats; let go, the song carries on
+    stutterBtn.getProperties().set ("style", "key");
+    stutterBtn.getProperties().set ("led", true);
+    stutterBtn.setBounds (596, 23, 92, 21);
+    stutterBtn.setTooltip ("Hold: the slice you're on repeats (beat repeat). Let go: straight back to where the song is. "
+                           "Map a MIDI key to the Stutter parameter in your DAW to play it from a controller");
+    stutterBtn.onStateChange = [this]
+    {
+        const bool down = stutterBtn.isDown();
+        if (down == stutterHeld) return;
+        stutterHeld = down;
+        auto* p = proc.apvts.getParameter ("stutter");
+        p->beginChangeGesture();
+        p->setValueNotifyingHost (down ? 1.0f : 0.0f);
+        p->endChangeGesture();
+    };
+    content.addAndMakeVisible (stutterBtn);
+    stutRateBox.addItemList ({ "1/2 BAR", "1/4", "1/8", "1/16", "1/32" }, 1);
+    stutRateBox.setBounds (694, 23, 74, 21);
+    stutRateBox.setTooltip ("How long the repeated slice is");
+    content.addAndMakeVisible (stutRateBox);
+    stutRateAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (proc.apvts, "sturate", stutRateBox);
+    {
+        auto& roll = addButton ("sturoll", "ROLL", { 774, 26, 48, 15 }, "rubber");
+        roll.getProperties().set ("onColour", (juce::int64) col::orange.getARGB());
+        roll.getProperties().set ("led", true);
+        roll.setTooltip ("ROLL: the slice gets shorter every two repeats (1/4, 1/8, 1/16, 1/32), the classic build-up into a drop");
+    }
+
     mapBtn.getProperties().set ("style", "key");
     mapBtn.setBounds (742, 76, 110, 24);
     mapBtn.onClick = [this] { showMapMenu(); };
@@ -1621,6 +1650,12 @@ void TrossSeqEditor::timerCallback()
     undoBtn.setEnabled (proc.canUndo());
     undoBtn.setAlpha (proc.canUndo() ? 1.0f : 0.55f);
     if (pendingRnd != lastPendingRnd) { lcd.repaint(); lastPendingRnd = pendingRnd; }
+    // STUTTER LED: lit while it's on (from the button, a MIDI-mapped key or automation)
+    if (const bool st = proc.apvts.getRawParameterValue ("stutter")->load() > 0.5f; st != lastStutter)
+    {
+        lastStutter = st;
+        stutterBtn.setToggleState (st, juce::dontSendNotification);
+    }
     const int lv = proc.lockVersion.load();
     if (lv != lastLockVersion) { for (auto& strip : strips) strip->repaint(); lastLockVersion = lv; }
 
