@@ -6,6 +6,7 @@
 #include "../Source/MidiExport.h"
 #include "../Source/PluginEditor.h"
 #include "../Source/Randomizer.h"
+#include <set>
 
 using namespace trossseq;
 
@@ -618,7 +619,7 @@ int main (int argc, char** argv)
         auto find = [] (const char* n) { for (int i = 0; i < TrackMap::kNumPresets; ++i) if (juce::String (TrackMap::preset (i).name) == n) return i; return -1; };
         const int tr06 = find ("Roland TR-06"), tr08 = find ("Roland TR-08"), tr09 = find ("Roland TR-09"), uvi = find ("UVI Prime 8");
         const int adm = find ("AudioRealism ADM (ADM1X)");
-        check (tr06 >= 0 && tr08 >= 0 && tr09 >= 0 && uvi >= 0 && adm >= 0 && TrackMap::kNumPresets == 8, "built-in maps: TR-06, TR-08, TR-09, UVI Prime 8, ADM added");
+        check (tr06 >= 0 && tr08 >= 0 && tr09 >= 0 && uvi >= 0 && adm >= 0 && TrackMap::kNumPresets == 9, "built-in maps: TR-06, TR-08, TR-09, UVI Prime 8, ADM added");
         bp.applyPreset (adm);
         check (bp.map.note (1) == 40 && bp.map.note (5) == 44 && bp.map.note (7) == 51 && bp.map.note (11) == 49 && bp.map.note (12) == 52
                && bp.getTrackName (12) == "PCF", "ADM: SD 40, CH 44, CY 51, CB 49, PCF 52 (unaccented keys)");
@@ -634,6 +635,12 @@ int main (int argc, char** argv)
         bp.applyPreset (uvi);
         check (bp.map.note (2) == 41 && bp.map.note (9) == 43 && bp.map.note (3) == 45 && bp.map.note (11) == 47 && bp.map.note (7) == 49,
                "UVI Prime 8: LT F1 41, MT G1 43, HT A1 45, CB B1 47, CY C#2 49");
+        const int abl = find ("Ableton Drum Rack");
+        bp.applyPreset (abl);
+        bool inRack = true; std::set<int> used;
+        for (int t = 0; t < kNumTracks; ++t) { inRack &= bp.map.note (t) >= 36 && bp.map.note (t) <= 51; used.insert (bp.map.note (t)); }
+        check (abl >= 0 && inRack && used.size() == (size_t) kNumTracks && bp.map.note (0) == 36 && bp.map.note (10) == 51 && bp.getTrackName (10) == "RD",
+               "Ableton Drum Rack: 13 different pads, all on C1..D#2 (BD C1, RD D#2)");
         bp.applyPreset (tr06);
         bp.patterns.clear (0);
         for (int i = 0; i < 20; ++i) bp.randomise (TrossSeqProcessor::RandomOp::NewPattern);

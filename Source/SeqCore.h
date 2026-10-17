@@ -144,7 +144,7 @@ public:
     // Lanes a machine doesn't have are named "---" (note 0): spare, and skipped by the randomiser.
     // Sources: each maker's MIDI implementation chart / manual (see the manual's reference section).
     struct Preset { const char* name; int kind; int channel; int notes[kNumTracks]; const char* labels[kNumTracks]; };
-    static constexpr int kNumPresets = 8;
+    static constexpr int kNumPresets = 9;
     static const Preset& preset (int i)
     {
         static const Preset p[kNumPresets] = {
@@ -170,6 +170,10 @@ public:
             // velocity (above 100) plays ADM's accent. PCF = Pattern Controlled Fx trigger (not randomised)
             { "AudioRealism ADM (ADM1X)", 2, 1, { 36, 40, 43, 50, 39, 44, 46, 51, 37, 47, 0, 49, 52 },
               { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY", "RS", "MT", "---", "CB", "PCF" } },
+            // Ableton Live Drum Rack: the 16 pads sit on C1..D#2 (36..51), laid out like General MIDI.
+            // E1 (40) and B1 (47) are the two pads left over. Channel 1 (a Drum Rack listens on every channel)
+            { "Ableton Drum Rack", 2, 1, { 36, 38, 41, 48, 39, 42, 46, 49, 37, 45, 51, 43, 44 },
+              { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY", "RS", "MT", "RD", "TOM", "PD HAT" } },
         };
         return p[i < 0 || i >= kNumPresets ? 0 : i];
     }
