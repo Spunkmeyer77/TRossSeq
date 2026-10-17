@@ -1107,14 +1107,34 @@ void TrossSeqEditor::showMapMenu()
     const bool modified = proc.isMapModified();
 
     juce::PopupMenu m;
+    // built-in maps: General MIDI, then hardware and software, each grouped by brand (a sub-menu per brand)
     static const char* kinds[3] = { "Built-in: General MIDI", "Built-in: hardware", "Built-in: software" };
+    auto label = [] (const TrackMap::Preset& p)
+    {
+        return juce::String (p.name) + "  (ch " + (p.channel > 0 ? juce::String (p.channel) : juce::String ("1-13")) + ")";
+    };
     for (int k = 0; k < 3; ++k)
     {
         m.addSectionHeader (kinds[k]);
+        juce::StringArray brands;
         for (int i = 0; i < TrackMap::kNumPresets; ++i)
-            if (TrackMap::preset (i).kind == k)
-                m.addItem (1 + i, juce::String (TrackMap::preset (i).name) + "  (ch " + juce::String (TrackMap::preset (i).channel) + ")",
-                           true, current == TrackMap::preset (i).name && ! modified);
+            if (TrackMap::preset (i).kind == k) brands.addIfNotAlreadyThere (TrackMap::preset (i).brand);
+        brands.sort (true);
+        for (const auto& b : brands)
+        {
+            juce::PopupMenu sub;
+            bool ticked = false;
+            for (int i = 0; i < TrackMap::kNumPresets; ++i)
+            {
+                const auto& p = TrackMap::preset (i);
+                if (p.kind != k || b != p.brand) continue;
+                const bool on = current == p.name && ! modified;
+                ticked |= on;
+                if (k == 0) m.addItem (1 + i, label (p), true, on);
+                else sub.addItem (1 + i, label (p), true, on);
+            }
+            if (k != 0) m.addSubMenu (b, sub, true, nullptr, ticked);
+        }
     }
 
     m.addSectionHeader ("My maps");

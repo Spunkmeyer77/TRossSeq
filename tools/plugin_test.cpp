@@ -619,7 +619,7 @@ int main (int argc, char** argv)
         auto find = [] (const char* n) { for (int i = 0; i < TrackMap::kNumPresets; ++i) if (juce::String (TrackMap::preset (i).name) == n) return i; return -1; };
         const int tr06 = find ("Roland TR-06"), tr08 = find ("Roland TR-08"), tr09 = find ("Roland TR-09"), uvi = find ("UVI Prime 8");
         const int adm = find ("AudioRealism ADM (ADM1X)");
-        check (tr06 >= 0 && tr08 >= 0 && tr09 >= 0 && uvi >= 0 && adm >= 0 && TrackMap::kNumPresets == 9, "built-in maps: TR-06, TR-08, TR-09, UVI Prime 8, ADM added");
+        check (tr06 >= 0 && tr08 >= 0 && tr09 >= 0 && uvi >= 0 && adm >= 0 && TrackMap::kNumPresets == 14, "built-in maps: TR-06, TR-08, TR-09, UVI Prime 8, ADM added");
         bp.applyPreset (adm);
         check (bp.map.note (1) == 40 && bp.map.note (5) == 44 && bp.map.note (7) == 51 && bp.map.note (11) == 49 && bp.map.note (12) == 52
                && bp.getTrackName (12) == "PCF", "ADM: SD 40, CH 44, CY 51, CB 49, PCF 52 (unaccented keys)");
@@ -641,6 +641,23 @@ int main (int argc, char** argv)
         for (int t = 0; t < kNumTracks; ++t) { inRack &= bp.map.note (t) >= 36 && bp.map.note (t) <= 51; used.insert (bp.map.note (t)); }
         check (abl >= 0 && inRack && used.size() == (size_t) kNumTracks && bp.map.note (0) == 36 && bp.map.note (10) == 51 && bp.getTrackName (10) == "RD",
                "Ableton Drum Rack: 13 different pads, all on C1..D#2 (BD C1, RD D#2)");
+        const int rd8 = find ("Behringer RD-8"), rd9 = find ("Behringer RD-9"), rd6 = find ("Behringer RD-6"), tr6s = find ("Roland TR-6S"), dt2 = find ("Elektron Digitakt II");
+        check (rd8 >= 0 && rd9 >= 0 && rd6 >= 0 && tr6s >= 0 && dt2 >= 0, "built-in maps: RD-8, RD-9, RD-6, TR-6S, Digitakt II");
+        bp.applyPreset (rd8);
+        check (bp.map.note (1) == 40 && bp.map.note (11) == 56 && bp.map.note (7) == 51 && bp.map.channel (0) == 1, "RD-8: SD 40, CB 56, CY 51, channel 1");
+        bp.applyPreset (rd9);
+        check (bp.map.note (7) == 49 && bp.map.note (10) == 51 && bp.getTrackName (11) == "---", "RD-9: CC 49, RC 51, no cowbell");
+        bp.applyPreset (rd6);
+        check (bp.map.note (2) == 45 && bp.map.note (4) == 39 && bp.getTrackName (8) == "---", "RD-6: LT 45, CP 39, spare lanes");
+        bp.applyPreset (tr6s);
+        check (bp.map.note (2) == 43 && bp.map.channel (0) == 10 && bp.getTrackName (3) == "---", "TR-6S: six instruments on channel 10");
+        bp.applyPreset (dt2);
+        bool perLane = true;
+        for (int t = 0; t < kNumTracks; ++t) perLane &= bp.map.channel (t) == t + 1 && bp.map.note (t) == 60;
+        check (perLane, "Digitakt II: lane N on channel N, note 60");
+        bool branded = true;
+        for (int i = 0; i < TrackMap::kNumPresets; ++i) branded &= juce::String (TrackMap::preset (i).brand).isNotEmpty();
+        check (branded, "every built-in map has a brand for the menu");
         bp.applyPreset (tr06);
         bp.patterns.clear (0);
         for (int i = 0; i < 20; ++i) bp.randomise (TrossSeqProcessor::RandomOp::NewPattern);

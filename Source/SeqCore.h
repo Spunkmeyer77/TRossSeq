@@ -143,44 +143,61 @@ public:
     // Built-in maps. kind: 0 = General MIDI, 1 = hardware, 2 = software.
     // Lanes a machine doesn't have are named "---" (note 0): spare, and skipped by the randomiser.
     // Sources: each maker's MIDI implementation chart / manual (see the manual's reference section).
-    struct Preset { const char* name; int kind; int channel; int notes[kNumTracks]; const char* labels[kNumTracks]; };
-    static constexpr int kNumPresets = 9;
+    // channel 0 = one channel per lane (lane 1 on channel 1, lane 2 on 2 ...), for machines with a channel per track.
+    // brand groups the PRESETS menu.
+    struct Preset { const char* name; int kind; int channel; int notes[kNumTracks]; const char* labels[kNumTracks]; const char* brand; };
+    static constexpr int kNumPresets = 14;
     static const Preset& preset (int i)
     {
         static const Preset p[kNumPresets] = {
             { "General MIDI drums", 0, 10, { 36, 38, 45, 50, 39, 42, 46, 49, 37, 47, 51, 56, 75 },
-              { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY", "RS", "MT", "RD", "CB", "CL" } },
+              { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY", "RS", "MT", "RD", "CB", "CL" }, "General MIDI" },
             { "Roland TR-8 / TR-8S", 1, 10, { 36, 38, 43, 50, 39, 42, 46, 49, 37, 47, 51, 56, 75 },
-              { "BD", "SD", "LT", "HT", "HC", "CH", "OH", "CC", "RS", "MT", "RC", "CB", "CL" } },
+              { "BD", "SD", "LT", "HT", "HC", "CH", "OH", "CC", "RS", "MT", "RC", "CB", "CL" }, "Roland" },
             { "Korg volca beats", 1, 10, { 36, 38, 43, 50, 39, 42, 46, 49, 75, 67, 37, 47, 51 },
-              { "KICK", "SNARE", "LO TOM", "HI TOM", "CLAP", "CL HAT", "OP HAT", "CRASH", "CLAVES", "AGOGO", "RIM", "MID TOM", "RIDE" } },
+              { "KICK", "SNARE", "LO TOM", "HI TOM", "CLAP", "CL HAT", "OP HAT", "CRASH", "CLAVES", "AGOGO", "RIM", "MID TOM", "RIDE" }, "Korg" },
             // Roland TR-06 MIDI implementation chart: ch 10
             { "Roland TR-06", 1, 10, { 36, 38, 47, 50, 0, 42, 46, 49, 0, 0, 0, 0, 0 },
-              { "BD", "SD", "LT", "HT", "---", "CH", "OH", "CY", "---", "---", "---", "---", "---" } },
+              { "BD", "SD", "LT", "HT", "---", "CH", "OH", "CY", "---", "---", "---", "---", "---" }, "Roland" },
             // Roland TR-08 MIDI implementation chart: ch 1. Congas (HC 62, MC 63, LC 64) left out: set a lane to them by hand
             { "Roland TR-08", 1, 1, { 36, 38, 43, 50, 39, 42, 46, 49, 37, 47, 70, 56, 75 },
-              { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY", "RS", "MT", "MA", "CB", "CL" } },
+              { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY", "RS", "MT", "MA", "CB", "CL" }, "Roland" },
             // Roland TR-09 MIDI implementation chart: ch 10
             { "Roland TR-09", 1, 10, { 36, 38, 43, 50, 39, 42, 46, 49, 37, 47, 51, 0, 0 },
-              { "BD", "SD", "LT", "HT", "HC", "CH", "OH", "CC", "RS", "MT", "RC", "---", "---" } },
+              { "BD", "SD", "LT", "HT", "HC", "CH", "OH", "CC", "RS", "MT", "RC", "---", "---" }, "Roland" },
             // UVI Prime 8 / Prime 8+ manual, MIDI mapping (C1 = 36). Software: set its MIDI channel to match
             { "UVI Prime 8", 2, 1, { 36, 38, 41, 45, 39, 42, 46, 49, 37, 43, 0, 47, 0 },
-              { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY", "RS", "MT", "---", "CB", "---" } },
+              { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY", "RS", "MT", "---", "CB", "---" }, "UVI" },
             // AudioRealism ADM manual, "Using Note Mode" (MIDI key numbers). Unaccented keys; TRoss Seq's accent
             // velocity (above 100) plays ADM's accent. PCF = Pattern Controlled Fx trigger (not randomised)
             { "AudioRealism ADM (ADM1X)", 2, 1, { 36, 40, 43, 50, 39, 44, 46, 51, 37, 47, 0, 49, 52 },
-              { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY", "RS", "MT", "---", "CB", "PCF" } },
+              { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY", "RS", "MT", "---", "CB", "PCF" }, "AudioRealism" },
             // Ableton Live Drum Rack: the 16 pads sit on C1..D#2 (36..51), laid out like General MIDI.
             // E1 (40) and B1 (47) are the two pads left over. Channel 1 (a Drum Rack listens on every channel)
             { "Ableton Drum Rack", 2, 1, { 36, 38, 41, 48, 39, 42, 46, 49, 37, 45, 51, 43, 44 },
-              { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY", "RS", "MT", "RD", "TOM", "PD HAT" } },
+              { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY", "RS", "MT", "RD", "TOM", "PD HAT" }, "Ableton" },
+            // Behringer RD-8 user manual, 11.4 MAP (default notes). The RD series receive on channel 1 by default
+            { "Behringer RD-8", 1, 1, { 36, 40, 45, 50, 39, 42, 46, 51, 37, 47, 0, 56, 0 },
+              { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY", "RS", "MT", "---", "CB", "---" }, "Behringer" },
+            // Behringer RD-9 user manual, 11.4 MAP: crash 49, ride 51
+            { "Behringer RD-9", 1, 1, { 36, 40, 45, 50, 39, 42, 46, 49, 37, 47, 51, 0, 0 },
+              { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CC", "RS", "MT", "RC", "---", "---" }, "Behringer" },
+            // Behringer RD-6 (606 voices + clap)
+            { "Behringer RD-6", 1, 1, { 36, 40, 45, 50, 39, 42, 46, 51, 0, 0, 0, 0, 0 },
+              { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY", "---", "---", "---", "---", "---" }, "Behringer" },
+            // Roland TR-6S MIDI implementation chart: ch 10, six instruments
+            { "Roland TR-6S", 1, 10, { 36, 38, 43, 0, 39, 42, 46, 0, 0, 0, 0, 0, 0 },
+              { "BD", "SD", "LT", "---", "HC", "CH", "OH", "---", "---", "---", "---", "---", "---" }, "Roland" },
+            // Elektron Digitakt II: a MIDI channel per track (track 1 = ch 1 ...). Note 60 (C4) plays the sample at its own pitch
+            { "Elektron Digitakt II", 1, 0, { 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60 },
+              { "BD", "SD", "LT", "HT", "CP", "CH", "OH", "CY", "RS", "MT", "RD", "CB", "PERC" }, "Elektron" },
         };
         return p[i < 0 || i >= kNumPresets ? 0 : i];
     }
     void setPreset (int i)
     {
         const auto& p = preset (i);
-        for (int t = 0; t < kNumTracks; ++t) { notes[t].store (p.notes[t]); channels[t].store (p.channel); }
+        for (int t = 0; t < kNumTracks; ++t) { notes[t].store (p.notes[t]); channels[t].store (p.channel > 0 ? p.channel : t + 1); }
         ++version;
     }
 
