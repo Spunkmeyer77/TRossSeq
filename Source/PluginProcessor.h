@@ -46,6 +46,14 @@ public:
     trossseq::TrackMap map;
     int  getCurrentSlot() const { return currentSlot.load(); }   // the slot that plays and is edited
     int  getPendingSlot() const { return pendingSlot.load(); }   // queued slot, -1 = none
+
+    // FILL pattern (TR-808 style): Shift + FILL arms it, then a pattern button picks the fill. It plays once, from the
+    // next step 1, then the pattern (or chain) that was playing carries on.
+    std::atomic<bool> fillArmed { false };
+    void queueFill (int slot) { fillQueued = slot; fillArmed = false; }
+    void cancelFill() { fillQueued = -1; fillArmed = false; }
+    int  getFillQueued() const { return fillQueued.load(); }
+    bool isFillPlaying() const { return fillPlaying.load(); }
     int  getPlayStep() const    { return playStep.load(); }      // step being played, -1 = stopped
     void clearCurrentPattern();                                  // CLEAR key (can be undone)
     // ---- pattern chain (message thread edits, audio thread plays). Locked to the song position:
@@ -223,6 +231,9 @@ private:
     void doStep (int step, long long absStep, int len, int sample, bool seqOn, juce::int64 gateSamples, juce::int64 hostSample = -1);
     void doGrace (int step, long long absStep, int len, int sample, juce::int64 lookSamples);
     void playNotes (int step, int sample, juce::int64 gateSamples, juce::int64 hostSample);
+    std::atomic<int> fillQueued { -1 };
+    std::atomic<bool> fillPlaying { false };
+    int fillReturn = -1;   // the pattern to go back to after the fill
     // STUTTER (beat repeat): while held, the slice that starts at stutStart (in 16ths) plays over and over
     bool stutActive = false;
     double stutStart = 0.0, stutLen = 2.0, stutSlice = 0.0, stutLastO = 0.0;

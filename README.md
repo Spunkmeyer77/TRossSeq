@@ -60,7 +60,7 @@ port, so drum boxes with their own sequencers or tempo-synced effects follow alo
 | REC | While playing, incoming notes that match a track are written into the nearest step. Velocity above 100 also sets the accent |
 | PATTERN 1–12 | While playing, a new slot waits until the current pattern reaches step 1. Right-click a slot to copy it to another slot or clear it |
 | RANDOM | Writes a new pattern into the playing slot, lane by lane, the way each drum is usually played (kick on the beat, snare on the backbeat, busy hats, sparse toms and percussion). The ACCENT row is never changed. **Shift-click** for a small variation of the current pattern instead. While the song plays, the new pattern starts on step 1 (the RANDOM light blinks until then) |
-| FILL | Randomises only the last four steps of the pattern, as a fill |
+| FILL | Randomises only the last four steps of the pattern, as a fill. **Shift-click:** TR-808 style fill: FILL flashes, click a pattern button, and that pattern plays once from the next step 1, then the previous pattern carries on |
 | UNDO | Goes back to the pattern before the last RANDOM / FILL (up to 32 steps back). While a result is still waiting for step 1, UNDO cancels it |
 | DENSITY | How busy random patterns are |
 | RANDOM STYLE | Straight, Electro, Broken, House, Techno, Detroit, Miami Bass, Breakbeat, Hip-Hop, Dub, Latin, Industrial. The randomiser never adds flams |

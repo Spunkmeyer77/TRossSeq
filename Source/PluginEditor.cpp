@@ -739,7 +739,7 @@ void PatternPad::paint (juce::Graphics& g)
             g.fillEllipse (juce::Rectangle<float> (5.0f, 5.0f).withCentre ({ r.getX() + 6.5f, r.getY() + 6.5f }));
         }
         else
-            drawLed (g, { r.getX() + 6.5f, r.getY() + 6.5f }, 5.0f, i == cur || (i == pending && blink));
+            drawLed (g, { r.getX() + 6.5f, r.getY() + 6.5f }, 5.0f, i == cur || ((i == pending || i == proc.getFillQueued()) && blink));
         g.setColour (juce::Colour (0xff222222));
         g.setFont (font (10.0f, true));
         g.drawText (juce::String (i + 1), r.withTrimmedLeft (6.0f), juce::Justification::centred);
@@ -782,6 +782,7 @@ void PatternPad::mouseDown (const juce::MouseEvent& e)
                                  });
                 return;
             }
+            if (proc.fillArmed.load()) { proc.queueFill (i); repaint(); return; }   // Shift + FILL was pressed: this is the fill
             if (e.mods.isShiftDown()) { proc.chainAppend (i); repaint(); return; }   // build a chain
             proc.chainClear();   // a plain click goes back to a single pattern
             proc.selectSlot (i);
@@ -808,6 +809,8 @@ void StatusLcd::paint (juce::Graphics& g)
     const int cur = proc.getCurrentSlot(), pending = proc.getPendingSlot();
     const int chainN = proc.getChainLength();
     const juce::String txt = chainN > 0 ? "CHN " + juce::String (juce::jmax (0, proc.getChainPos()) + 1) + "/" + juce::String (chainN) + " P" + juce::String (cur + 1)
+                           : proc.getFillQueued() >= 0 ? "PAT " + juce::String (cur + 1) + " > FILL " + juce::String (proc.getFillQueued() + 1)
+                           : proc.isFillPlaying() ? "FILL " + juce::String (cur + 1)
                            : pending >= 0 ? "PAT " + juce::String (cur + 1) + " > " + juce::String (pending + 1)
                            : proc.isRandomPending() ? "PAT " + juce::String (cur + 1) + " > RND"
                                                     : "PATTERN " + juce::String (cur + 1);
@@ -1043,8 +1046,19 @@ TrossSeqEditor::TrossSeqEditor (TrossSeqProcessor& p)
         proc.randomise (shift ? TrossSeqProcessor::RandomOp::Mutate : TrossSeqProcessor::RandomOp::NewPattern);
         grid.repaint(); lcd.repaint();
     };
-    key (fillBtn, { 996, kRndY + 72, 50, 24 }, "Random fill on the last four steps");
-    fillBtn.onClick = [this] { proc.randomise (TrossSeqProcessor::RandomOp::Fill); grid.repaint(); lcd.repaint(); };
+    key (fillBtn, { 996, kRndY + 72, 50, 24 }, "Click: random fill on the last four steps. Shift-click: TR-808 fill (FILL flashes, then pick a pattern: it plays once, then back)");
+    fillBtn.getProperties().set ("led", true);
+    fillBtn.onClick = [this]
+    {
+        if (juce::ModifierKeys::getCurrentModifiers().isShiftDown())   // TR-808 fill: arm, then pick a pattern (again = cancel)
+        {
+            if (proc.fillArmed.load() || proc.getFillQueued() >= 0) proc.cancelFill();
+            else proc.fillArmed = true;
+            patternPad.repaint();
+            return;
+        }
+        proc.randomise (TrossSeqProcessor::RandomOp::Fill); grid.repaint(); lcd.repaint();
+    };
     key (undoBtn, { 1052, kRndY + 72, 52, 24 }, "Back to the pattern before the last RANDOM, FILL, CLEAR or lane clear");
     undoBtn.onClick = [this] { proc.undoRandom(); grid.repaint(); lcd.repaint(); };
 
@@ -1650,6 +1664,14 @@ void TrossSeqEditor::timerCallback()
     undoBtn.setEnabled (proc.canUndo());
     undoBtn.setAlpha (proc.canUndo() ? 1.0f : 0.55f);
     if (pendingRnd != lastPendingRnd) { lcd.repaint(); lastPendingRnd = pendingRnd; }
+    // FILL LED: flashes while armed (waiting for a pattern button), lit while the fill is queued or playing
+    {
+        const bool armed = proc.fillArmed.load(), busy = proc.getFillQueued() >= 0 || proc.isFillPlaying();
+        const bool on = armed ? (juce::Time::getMillisecondCounter() / 200) % 2 == 0 : busy;
+        if (on != fillBtn.getToggleState()) fillBtn.setToggleState (on, juce::dontSendNotification);
+        if (armed || busy || fillWasBusy) { patternPad.repaint(); lcd.repaint(); }
+        fillWasBusy = armed || busy;
+    }
     // STUTTER LED: lit while it's on (from the button, a MIDI-mapped key or automation)
     if (const bool st = proc.apvts.getRawParameterValue ("stutter")->load() > 0.5f; st != lastStutter)
     {

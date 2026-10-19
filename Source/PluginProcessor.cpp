@@ -605,9 +605,14 @@ void TrossSeqProcessor::chainRemoveLast()
 void TrossSeqProcessor::doStep (int step, long long absStep, int len, int sample, bool seqOn, juce::int64 gateSamples, juce::int64 hostSample)
 {
     const int chained = chainSlotFor (absStep, len);
+    if (step == 0 && fillPlaying.load())   // the fill has played its bar: back to what was playing
+    {
+        fillPlaying = false;
+        if (chained < 0) currentSlot = fillReturn;
+    }
     if (chained >= 0)   // a chain decides which pattern plays, from the song position
     {
-        currentSlot = chained;
+        if (! fillPlaying.load()) currentSlot = chained;
         pendingSlot = -1;
         const int n = chainLen.load();
         const long long bar = absStep >= 0 ? absStep / len : -((-absStep + len - 1) / len);
@@ -622,6 +627,13 @@ void TrossSeqProcessor::doStep (int step, long long absStep, int len, int sample
             pendingSlot = -1;
         }
         applyStaged();   // a randomised pattern takes over on step 1
+    }
+    if (step == 0 && fillQueued.load() >= 0)   // a fill was picked: it plays this bar, once
+    {
+        fillReturn = currentSlot.load();
+        currentSlot = fillQueued.load();
+        fillQueued = -1;
+        fillPlaying = true;
     }
     if (! stutActive) playStep = step;   // while stuttering the LEDs follow the repeated steps
     if (! seqOn) return;
@@ -789,6 +801,7 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         numHeld = 0;
         playStep = -1;
         stutActive = false; stutShown = false;
+        if (fillPlaying.load()) { fillPlaying = false; currentSlot = fillReturn; }   // stopped mid-fill: back to the pattern
         skipSteps = skipGrace = 0;
         lastFiredStep = lastGraceStep = LLONG_MIN;
     }

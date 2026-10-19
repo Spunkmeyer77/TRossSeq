@@ -232,7 +232,7 @@ public:
     juce::ComboBox stutRateBox;
 private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> stutRateAtt;
-    bool stutterHeld = false, lastStutter = false;
+    bool stutterHeld = false, lastStutter = false, fillWasBusy = false;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> styleAtt;
     bool lastPendingRnd = false;
     int lastLockVersion = -1;

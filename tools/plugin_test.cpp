@@ -887,6 +887,52 @@ int main (int argc, char** argv)
         sp ("sturoll", 0.0f);
     }
 
+    // 14h. TR-808 fill: Shift + FILL, then a pattern: it plays once from the next step 1, then back
+    {
+        TrossSeqProcessor fp;
+        FakeHost h6; fp.setPlayHead (&h6);
+        fp.setRateAndBufferSizeDetails (sr, block); fp.prepareToPlay (sr, block);
+        for (int sl = 0; sl < 3; ++sl) fp.patterns.clear (sl);
+        fp.patterns.setCell (0, 1, 0, true);   // pattern 1: BD
+        fp.patterns.setCell (1, 2, 0, true);   // pattern 2: SD (the fill)
+        fp.patterns.setCell (2, 5, 0, true);   // pattern 3: CP
+        juce::AudioBuffer<float> b6 (2, block);
+        std::vector<int> bars;   // the note on step 1 of each bar
+        auto runF = [&] (int blocks, std::function<void (int)> at = {})
+        {
+            for (int k = 0; k < blocks; ++k)
+            {
+                if (at) at (k);
+                juce::MidiBuffer m; fp.processBlock (b6, m);
+                for (const auto md : m) if (md.getMessage().isNoteOn()) bars.push_back (md.getMessage().getNoteNumber());
+                h6.ppq += block / sr * h6.bpm / 60.0;
+            }
+        };
+        h6.playing = true; h6.ppq = 0.0;
+        fp.fillArmed = true;
+        runF (800, [&] (int k) { if (k == 50) fp.queueFill (1); });   // picked in the middle of bar 1
+        check (bars == std::vector<int> { 36, 38, 36, 36 }, "fill pattern 2 plays once in bar 2, then pattern 1 again");
+        check (! fp.fillArmed.load() && fp.getFillQueued() == -1 && ! fp.isFillPlaying() && fp.getCurrentSlot() == 0, "fill done: nothing left waiting");
+        // with a chain (1 > 3): the fill takes one bar, the chain carries on from the song position
+        bars.clear();
+        h6.playing = false; { juce::MidiBuffer m; fp.processBlock (b6, m); }
+        fp.chainAppend (0); fp.chainAppend (2);
+        h6.playing = true; h6.ppq = 0.0;
+        runF (800, [&] (int k) { if (k == 50) fp.queueFill (1); });
+        check (bars == std::vector<int> { 36, 38, 36, 39 }, "with a chain: bar 2 is the fill, bars 3-4 follow the chain");
+        fp.chainClear();
+        // stopping in the middle of a fill goes back to the pattern
+        bars.clear();
+        h6.playing = false; { juce::MidiBuffer m; fp.processBlock (b6, m); }
+        fp.selectSlot (0);
+        h6.playing = true; h6.ppq = 0.0;
+        fp.queueFill (2);
+        runF (100);
+        const bool wasFill = fp.isFillPlaying() && fp.getCurrentSlot() == 2;
+        h6.playing = false; { juce::MidiBuffer m; fp.processBlock (b6, m); }
+        check (wasFill && ! fp.isFillPlaying() && fp.getCurrentSlot() == 0, "stop during a fill: back to pattern 1");
+    }
+
     // 14c. drum map library
     {
         auto dir = outDir.getChildFile ("maps");
@@ -1116,6 +1162,28 @@ int main (int argc, char** argv)
             check (on && proc.apvts.getRawParameterValue ("solo4")->load() < 0.5f, "S on: lane 4 soloed, S off: not");
             solos[1]->setToggleState (true, juce::sendNotificationSync);   // leave one lit for the snapshot
         }
+    }
+    // armed FILL: the next pattern button picks the fill (no pattern change, no chain)
+    {
+        PatternPad* pad = nullptr;
+        std::function<void (juce::Component&)> find = [&] (juce::Component& c)
+        { for (auto* ch : c.getChildren()) { if (auto* pp = dynamic_cast<PatternPad*> (ch)) pad = pp; find (*ch); } };
+        find (*ed);
+        if (pad != nullptr)
+        {
+            const auto selBefore = proc.apvts.getRawParameterValue ("pattern")->load();
+            const int chainBefore = proc.getChainLength();
+            proc.fillArmed = true;
+            auto src = juce::Desktop::getInstance().getMainMouseSource();
+            const auto pos = PatternPad::buttonRect (4).getCentre();
+            juce::MouseEvent e (src, pos, juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, pad, pad,
+                                juce::Time::getCurrentTime(), pos, juce::Time::getCurrentTime(), 1, false);
+            pad->mouseDown (e);
+            check (proc.getFillQueued() == 4 && ! proc.fillArmed.load() && proc.apvts.getRawParameterValue ("pattern")->load() == selBefore
+                   && proc.getChainLength() == chainBefore, "FILL armed, click pattern 5: it is queued as the fill, the playing pattern stays (" + juce::String (proc.getFillQueued()) + " " + juce::String ((int) proc.fillArmed.load()) + " " + juce::String (proc.getChainLength()) + ")");
+            proc.cancelFill();
+        }
+        else check (false, "pattern pad found");
     }
     // STUTTER button: on while held, off on release
     if (auto* te = dynamic_cast<TrossSeqEditor*> (ed.get()))
