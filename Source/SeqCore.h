@@ -43,6 +43,19 @@ struct FlamStyle
     float levelPct (float knobPct) const  { return level == 0 ? knobPct : kLevelPct[level]; }
 };
 
+// ---- parameter locks: per pattern, lane and step, a value that replaces the knob for that one step
+enum LockParam { kLockVel = 0, kLockGate, kLockNudge, kLockChance, kLockRatchet, kLockPitch, kLockCC1, kLockCC2, kLockCC3, kLockCC4, kNumLockParams };
+struct LockInfo { const char* name; const char* shortName; int lo, hi, unlocked; };   // `unlocked` = what a step without a lock does
+inline const LockInfo& lockInfo (int p)
+{
+    static const LockInfo info[kNumLockParams] = {
+        { "VELOCITY", "VEL", 1, 127, 100 }, { "GATE", "GATE", 5, 95, 50 }, { "NUDGE", "NUDGE", -50, 50, 0 },
+        { "CHANCE", "CHANCE", 0, 100, 100 }, { "RATCHET", "RATCH", 1, 4, 1 }, { "PITCH", "PITCH", -12, 12, 0 },
+        { "CC 1", "CC1", 0, 127, 0 }, { "CC 2", "CC2", 0, 127, 0 }, { "CC 3", "CC3", 0, 127, 0 }, { "CC 4", "CC4", 0, 127, 0 } };
+    return info[p < 0 || p >= kNumLockParams ? 0 : p];
+}
+constexpr int16_t kNoLock = -32768;
+
 // Edited from the UI thread, read and recorded into from the audio thread, so every row is atomic.
 class PatternMemory
 {
@@ -87,7 +100,7 @@ public:
         m = on ? (uint16_t) (m | (1u << step)) : (uint16_t) (m & ~(1u << step));
         set (slot, row, m);
     }
-    void clear (int slot) { for (int r = 0; r < kNumRows; ++r) set (slot, r, 0); }
+    void clear (int slot) { for (int r = 0; r < kNumRows; ++r) set (slot, r, 0); clearLocks (slot); }
     void copySlot (int from, int to)
     {
         for (int r = 0; r < kNumRows; ++r)
@@ -96,6 +109,38 @@ public:
             setFlams (to, r, getFlams (from, r));
             for (int s = 0; s < kNumSteps; ++s) setFlamStyle (to, r, s, getFlamStyle (from, r, s));
         }
+        for (int t = 0; t < kNumTracks; ++t)
+            for (int s = 0; s < kNumSteps; ++s)
+                for (int p = 0; p < kNumLockParams; ++p) setLock (to, t, s, p, getLock (from, t, s, p));
+    }
+
+    // ---- parameter locks (track = lane 0..12). kNoLock = the step follows the knob
+    int16_t getLock (int slot, int track, int step, int p) const { return locks[slot][track][step][p].load (std::memory_order_relaxed); }
+    bool isLocked (int slot, int track, int step, int p) const   { return getLock (slot, track, step, p) != kNoLock; }
+    void setLock (int slot, int track, int step, int p, int16_t v)
+    {
+        if (v != kNoLock) v = (int16_t) std::clamp ((int) v, lockInfo (p).lo, lockInfo (p).hi);
+        locks[slot][track][step][p].store (v, std::memory_order_relaxed);
+        ++version;
+    }
+    void clearLocks (int slot, int track = -1, int p = -1)
+    {
+        for (int t = 0; t < kNumTracks; ++t)
+            if (track < 0 || t == track)
+                for (int s = 0; s < kNumSteps; ++s)
+                    for (int q = 0; q < kNumLockParams; ++q)
+                        if (p < 0 || q == p) locks[slot][t][s][q].store (kNoLock, std::memory_order_relaxed);
+        ++version;
+    }
+    bool laneHasLocks (int slot, int track) const
+    {
+        for (int s = 0; s < kNumSteps; ++s)
+            for (int q = 0; q < kNumLockParams; ++q) if (isLocked (slot, track, s, q)) return true;
+        return false;
+    }
+    PatternMemory()
+    {
+        for (auto& a : locks) for (auto& b : a) for (auto& c : b) for (auto& d : c) d.store (kNoLock, std::memory_order_relaxed);
     }
     bool isEmpty (int slot) const
     {
@@ -109,6 +154,7 @@ private:
     std::atomic<uint16_t> masks[kNumSlots][kNumRows] {};
     std::atomic<uint16_t> flams[kNumSlots][kNumRows] {};
     std::atomic<uint8_t> styles[kNumSlots][kNumRows][kNumSteps] {};
+    std::atomic<int16_t> locks[kNumSlots][kNumTracks][kNumSteps][kNumLockParams];
     std::atomic<int> version { 0 };
 
     void resetStyles (int slot, int row, uint16_t gone)
@@ -131,6 +177,9 @@ public:
     void setChannel (int t, int c) { channels[t].store (c < 1 ? 1 : (c > 16 ? 16 : c)); ++version; }
     void setAllChannels (int c)    { for (int t = 0; t < kNumTracks; ++t) setChannel (t, c); }
     int  getVersion() const        { return version.load(); }
+    // the 4 CC numbers each lane's CC locks send on (-1 = not used)
+    int  ccNumber (int t, int k) const   { return ccs[t][k].load (std::memory_order_relaxed); }
+    void setCcNumber (int t, int k, int n) { ccs[t][k].store (n < 0 ? -1 : (n > 127 ? 127 : n)); ++version; }
 
     // the track that an incoming note belongs to: same note and channel first, then same note on any channel
     int trackFor (int noteNumber, int ch) const
@@ -197,11 +246,17 @@ public:
     void setPreset (int i)
     {
         const auto& p = preset (i);
-        for (int t = 0; t < kNumTracks; ++t) { notes[t].store (p.notes[t]); channels[t].store (p.channel > 0 ? p.channel : t + 1); }
+        for (int t = 0; t < kNumTracks; ++t)
+        {
+            notes[t].store (p.notes[t]); channels[t].store (p.channel > 0 ? p.channel : t + 1);
+            for (auto& c : ccs[t]) c.store (-1);   // a new machine: its CCs are set up again
+        }
         ++version;
     }
 
 private:
+    std::atomic<int> ccs[kNumTracks][4] { { -1, -1, -1, -1 }, { -1, -1, -1, -1 }, { -1, -1, -1, -1 }, { -1, -1, -1, -1 }, { -1, -1, -1, -1 }, { -1, -1, -1, -1 }, { -1, -1, -1, -1 },
+                                          { -1, -1, -1, -1 }, { -1, -1, -1, -1 }, { -1, -1, -1, -1 }, { -1, -1, -1, -1 }, { -1, -1, -1, -1 }, { -1, -1, -1, -1 } };
     std::atomic<int> notes[kNumTracks] {}, channels[kNumTracks] {};
     std::atomic<int> version { 0 };
 };

@@ -184,7 +184,8 @@ private:
     std::atomic<int> staged { -1 };         // index of the buffer waiting, -1 = none
     void applyStaged();                     // audio thread
     struct SlotSnap { int slot = 0; uint16_t rows[trossseq::kNumRows] {}, flams[trossseq::kNumRows] {};
-                      uint8_t styles[trossseq::kNumRows][trossseq::kNumSteps] {}; };
+                      uint8_t styles[trossseq::kNumRows][trossseq::kNumSteps] {};
+                      int16_t locks[trossseq::kNumTracks][trossseq::kNumSteps][trossseq::kNumLockParams] {}; };
     struct UndoEntry { std::vector<SlotSnap> slots; bool hasChain = false; std::vector<int> chain; };
     void pushChainUndo();
     void setChain (const std::vector<int>&);
@@ -226,11 +227,24 @@ private:
     } raw {};
 
     void emit (const juce::MidiMessage& m, int sample, bool fromSeq = false, juce::int64 hostSample = -1);
-    void noteOn (int track, int velocity, int sample, juce::int64 gateSamples, bool fromSeq = false, juce::int64 hostSample = -1);
+    void noteOn (int track, int velocity, int sample, juce::int64 gateSamples, bool fromSeq = false, juce::int64 hostSample = -1, int pitch = 0);
     void flushNoteOffs (int sample);
     void doStep (int step, long long absStep, int len, int sample, bool seqOn, juce::int64 gateSamples, juce::int64 hostSample = -1);
     void doGrace (int step, long long absStep, int len, int sample, juce::int64 lookSamples);
-    void playNotes (int step, int sample, juce::int64 gateSamples, juce::int64 hostSample);
+    void playNotes (int step, int sample, juce::int64 gateSamples, juce::int64 hostSample, bool skipNudged = true);
+    void playTrack (int slot, int step, int track, int sample, juce::int64 gateSamples, juce::int64 hostSample);
+    int  slotForStep (long long absStep, int len) const;   // the pattern that will play at absStep (for look-ahead)
+    double curSamplesPerStep = 6000.0;
+    trossseq::StepClock nudgeClock;
+    long long lastNudgeStep = LLONG_MIN;
+    int skipNudge = 0;
+    juce::Random chanceRnd;
+public:
+    // tests only: rolls for CHANCE come from here
+    void seedChance (juce::int64 s) { chanceRnd.setSeed (s); }
+    // undo point for edits on the LOCKS page (message thread)
+    void pushLockUndo() { pushUndo ({ currentSlot.load() }); }
+private:
     std::atomic<int> fillQueued { -1 };
     std::atomic<bool> fillPlaying { false };
     int fillReturn = -1;   // the pattern to go back to after the fill
@@ -244,7 +258,8 @@ public:
 private:
     std::atomic<bool> stutShown { false };
     // grace notes waiting to be played (flam / drag / ruff), sample positions relative to this block
-    struct SchedNote { int track = 0, velocity = 0; juce::int64 due = 0, gate = 1; };
+    // kind 0 = a plain hit (grace note, ratchet repeat); kind 1 = a nudged step: plays the whole step (locks, chance) when due
+    struct SchedNote { int track = 0, velocity = 0; juce::int64 due = 0, gate = 1; int pitch = 0, kind = 0, slot = 0, step = 0; };
     static constexpr int kMaxSched = 128;
     SchedNote sched[kMaxSched];
     int numSched = 0;

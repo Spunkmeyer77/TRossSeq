@@ -134,6 +134,36 @@ private:
     TrossSeqProcessor& proc;
 };
 
+// The P-LOCKS page: replaces the step grid when LOCKS is picked. One lane at a time (names on the left), one tall bar
+// per step for the chosen parameter (VELOCITY ... CC 4), the CC numbers per lane, and a read-out of the touched step.
+class LockPage : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    explicit LockPage (TrossSeqProcessor& p) : proc (p) { setOpaque (true); }
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void mouseDrag (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
+    void mouseDoubleClick (const juce::MouseEvent&) override;
+
+    int lane = 0, param = 0, touched = -1;
+    static juce::Rectangle<float> laneRect (int t);
+    static juce::Rectangle<float> barRect (int step);
+    static juce::Rectangle<float> paramRect (int p);       // VELOCITY..PITCH, and the CC 1..4 buttons
+    static juce::Rectangle<float> ccDisplayRect (int k);
+    int valueAt (float y) const;                           // bar y -> value of the current parameter
+    int unlockedValue (int step) const;                    // what a step without a lock plays
+    static juce::String ccLabel (int number);
+    void setFromMouse (int step, float y);
+    void showCcMenu (int k);
+private:
+    TrossSeqProcessor& proc;
+    int dragStep = -1, ccDrag = -1, ccStartNum = -1;
+    float dragStartY = 0.0f;
+    int fineStartValue = 0;
+    bool ccMoved = false, barDrag = false;
+};
+
 // Amber read-out: playing pattern, and the queued one
 class StatusLcd : public juce::Component
 {
@@ -215,6 +245,15 @@ private:
     PortBox portBox { proc };
     std::vector<std::unique_ptr<NameStrip>> strips;
     ExportKey exportKey { proc };
+public:
+    LockPage lockPage { proc };
+    juce::TextButton stepsBtn { "STEPS" }, locksBtn { "LOCKS" };
+    void setLockMode (bool on);
+    bool isLockMode() const { return lockMode; }
+private:
+    bool lockMode = false;
+    std::vector<juce::Component*> laneControls;   // NOTE, CH, M, S, LEARN, name strips: hidden on the LOCKS page
+    int lastLockPageKey = -1;
 
     std::vector<std::unique_ptr<juce::Slider>> sliders;
     std::vector<std::unique_ptr<juce::Button>> buttons;

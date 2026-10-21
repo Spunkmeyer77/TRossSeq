@@ -933,6 +933,119 @@ int main (int argc, char** argv)
         check (wasFill && ! fp.isFillPlaying() && fp.getCurrentSlot() == 0, "stop during a fill: back to pattern 1");
     }
 
+    // 14i. parameter locks: velocity, gate, pitch, chance, ratchet, nudge (early / late) and CCs, one step at a time
+    {
+        TrossSeqProcessor lp;
+        FakeHost h7; lp.setPlayHead (&h7);
+        lp.setRateAndBufferSizeDetails (sr, block); lp.prepareToPlay (sr, block);
+        lp.patterns.clear (0);
+        for (int st : { 0, 4, 8, 12 }) lp.patterns.setCell (0, 1, st, true);   // BD on 1, 5, 9, 13
+        juce::AudioBuffer<float> b7 (2, block);
+        struct E { juce::int64 t; juce::MidiMessage m; };
+        std::vector<E> ev;
+        juce::int64 t = 0;
+        auto bar = [&]
+        {
+            ev.clear(); t = 0;
+            h7.playing = false; { juce::MidiBuffer m; lp.processBlock (b7, m); }
+            h7.playing = true; h7.ppq = 0.0;
+            for (int k = 0; k < 200; ++k)
+            {
+                juce::MidiBuffer m; lp.processBlock (b7, m);
+                for (const auto md : m) ev.push_back ({ t + md.samplePosition, md.getMessage() });
+                h7.ppq += block / sr * h7.bpm / 60.0; t += block;
+            }
+        };
+        auto ons = [&] { std::vector<E> r; for (auto& e : ev) if (e.m.isNoteOn()) r.push_back (e); return r; };
+        bar();
+        check (ons().size() == 4 && ons()[1].m.getVelocity() == 100, "no locks: 4 kicks at the knob velocity");
+        lp.patterns.setLock (0, 0, 4, kLockVel, 37);
+        lp.patterns.setLock (0, 0, 8, kLockPitch, 5);
+        lp.patterns.setLock (0, 0, 12, kLockGate, 90);
+        bar();
+        {
+            auto o = ons();
+            juce::int64 off13 = -1;
+            for (auto& e : ev) if (e.m.isNoteOff() && e.t >= 72000) { off13 = e.t; break; }
+            check (o.size() == 4 && o[1].m.getVelocity() == 37 && o[0].m.getVelocity() == 100 && o[2].m.getNoteNumber() == 41 && o[3].m.getNoteNumber() == 36
+                   && off13 == 72000 + 5400, "VELOCITY 37 on step 5, PITCH +5 on step 9 (note 41), GATE 90 % on step 13 (5400 samples)");
+        }
+        lp.patterns.clearLocks (0);
+        lp.patterns.setLock (0, 0, 4, kLockChance, 0);
+        lp.patterns.setLock (0, 0, 8, kLockChance, 100);
+        bar();
+        check (ons().size() == 3, "CHANCE 0 % never plays, 100 % always does");
+        lp.patterns.setLock (0, 0, 4, kLockChance, 50);
+        lp.seedChance (1234);
+        int played = 0;
+        for (int r = 0; r < 40; ++r) { bar(); for (auto& e : ons()) if (e.t == 24000) ++played; }
+        check (played > 8 && played < 32, "CHANCE 50 %: plays about half the time (" + juce::String (played) + " of 40)");
+        lp.patterns.clearLocks (0);
+        lp.patterns.setLock (0, 0, 4, kLockRatchet, 3);
+        bar();
+        {
+            std::vector<juce::int64> at; for (auto& e : ons()) at.push_back (e.t);
+            check (at == std::vector<juce::int64> { 0, 24000, 26000, 28000, 48000, 72000 }, "RATCHET 3: three hits spread over step 5");
+        }
+        lp.patterns.clearLocks (0);
+        lp.patterns.setLock (0, 0, 4, kLockNudge, 25);
+        lp.patterns.setLock (0, 0, 8, kLockNudge, -40);
+        bar();
+        {
+            std::vector<juce::int64> at; for (auto& e : ons()) at.push_back (e.t);
+            check (at == std::vector<juce::int64> { 0, 24000 + 1500, 48000 - 2400, 72000 }, "NUDGE +25 % plays step 5 late, -40 % plays step 9 early");
+        }
+        lp.patterns.clearLocks (0);
+        lp.map.setCcNumber (0, 0, 74); lp.map.setCcNumber (0, 2, 71);
+        lp.patterns.setLock (0, 0, 4, kLockCC1, 99);
+        lp.patterns.setLock (0, 0, 4, kLockCC3, 12);
+        lp.patterns.setLock (0, 0, 8, kLockCC2, 64);   // CC 2 has no number: nothing sent
+        bar();
+        {
+            std::vector<juce::String> cc; int noteAt5 = -1, idx = 0;
+            for (auto& e : ev)
+            {
+                if (e.m.isController()) cc.push_back (juce::String (e.m.getControllerNumber()) + "=" + juce::String (e.m.getControllerValue()) + "@" + juce::String ((int) e.t));
+                if (e.m.isNoteOn() && e.t == 24000 && noteAt5 < 0) noteAt5 = idx;
+                ++idx;
+            }
+            int lastCc = -1; idx = 0; for (auto& e : ev) { if (e.m.isController()) lastCc = idx; ++idx; }
+            check (cc == std::vector<juce::String> { "74=99@24000", "71=12@24000" } && lastCc < noteAt5 && ev[(size_t) lastCc].m.getChannel() == 10,
+                   "CC 1 (74) and CC 3 (71) sent on step 5, just before the note, on the lane's channel");
+        }
+        lp.patterns.setLock (0, 0, 4, kLockVel, 50);
+        juce::MemoryBlock mb; lp.getStateInformation (mb);
+        TrossSeqProcessor lr; lr.setStateInformation (mb.getData(), (int) mb.getSize());
+        check (lr.patterns.getLock (0, 0, 4, kLockVel) == 50 && lr.patterns.getLock (0, 0, 4, kLockCC1) == 99 && lr.map.ccNumber (0, 0) == 74
+               && ! lr.patterns.isLocked (0, 0, 5, kLockVel), "locks and CC numbers saved with the project");
+        lp.patterns.copySlot (0, 3);
+        check (lp.patterns.getLock (3, 0, 4, kLockVel) == 50, "copying a pattern copies its locks");
+        {   // EXPORT MIDI writes the locks
+            TrossSeqProcessor xp;
+            xp.patterns.clear (0);
+            xp.patterns.setCell (0, 1, 0, true); xp.patterns.setCell (0, 1, 4, true); xp.patterns.setCell (0, 1, 8, true);
+            xp.patterns.setLock (0, 0, 0, kLockVel, 33);
+            xp.patterns.setLock (0, 0, 4, kLockRatchet, 2);
+            xp.patterns.setLock (0, 0, 8, kLockPitch, -3);
+            xp.patterns.setLock (0, 0, 8, kLockNudge, 50);
+            xp.map.setCcNumber (0, 0, 74); xp.patterns.setLock (0, 0, 0, kLockCC1, 90);
+            MidiExport::Settings xs;
+            auto mf = MidiExport::make (xp.patterns, xp.map, { 0 }, xs, "locks");
+            std::vector<juce::String> got;
+            for (auto* e : *mf.getTrack (0))
+            {
+                const auto& m = e->message;
+                if (m.isNoteOn()) got.push_back ("N" + juce::String (m.getNoteNumber()) + "v" + juce::String (m.getVelocity()) + "@" + juce::String ((int) m.getTimeStamp()));
+                if (m.isController()) got.push_back ("C" + juce::String (m.getControllerNumber()) + "=" + juce::String (m.getControllerValue()) + "@" + juce::String ((int) m.getTimeStamp()));
+            }
+            juce::String all; for (auto& g2 : got) all << g2 << " ";
+            check (got == std::vector<juce::String> { "C74=90@0", "N36v33@0", "N36v100@96", "N36v100@108", "N33v100@204" },
+                   "EXPORT MIDI: velocity, CC, ratchet, pitch and nudge locks in the clip (" + all.trim() + ")");
+        }
+        lp.patterns.setLock (0, 0, 4, kLockVel, 500);
+        check (lp.patterns.getLock (0, 0, 4, kLockVel) == 127, "lock values stay in range");
+    }
+
     // 14c. drum map library
     {
         auto dir = outDir.getChildFile ("maps");
@@ -1184,6 +1297,58 @@ int main (int argc, char** argv)
             proc.cancelFill();
         }
         else check (false, "pattern pad found");
+    }
+    // the LOCKS page: STEPS / LOCKS keys swap the zone; drag on a bar locks, double-click unlocks; CC numbers per lane
+    if (auto* te = dynamic_cast<TrossSeqEditor*> (ed.get()))
+    {
+        te->locksBtn.onClick();
+        check (te->isLockMode() && te->lockPage.isVisible() && ! te->lockPage.getBounds().isEmpty(), "LOCKS key: the lock page replaces the grid");
+        auto& lpg = te->lockPage;
+        const int sl = proc.getCurrentSlot();
+        proc.patterns.clearLocks (sl);
+        lpg.lane = 5; lpg.param = kLockVel;
+        auto src = juce::Desktop::getInstance().getMainMouseSource();
+        auto mev = [&] (juce::Point<float> p, juce::ModifierKeys mods, int clicks = 1)
+        {
+            return juce::MouseEvent (src, p, mods, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, &lpg, &lpg, juce::Time::getCurrentTime(), p, juce::Time::getCurrentTime(), clicks, false);
+        };
+        const auto left = juce::ModifierKeys (juce::ModifierKeys::leftButtonModifier);
+        const auto b2 = LockPage::barRect (2), b6 = LockPage::barRect (6);
+        lpg.mouseDown (mev ({ b2.getCentreX(), b2.getY() + 5.0f }, left));          // top of the bar: 127
+        lpg.mouseDrag (mev ({ b6.getCentreX(), b6.getBottom() - 5.0f }, left));     // drawn across to the bottom: 1
+        lpg.mouseUp (mev ({ b6.getCentreX(), b6.getBottom() - 5.0f }, left));
+        bool drawn = true;
+        for (int s2 = 2; s2 <= 6; ++s2) drawn &= proc.patterns.getLock (sl, 5, s2, kLockVel) == 1;
+        check (drawn && ! proc.patterns.isLocked (sl, 5, 1, kLockVel) && ! proc.patterns.isLocked (sl, 5, 7, kLockVel),
+               "drag across the bars draws locks on steps 3-7");
+        lpg.mouseDown (mev ({ b2.getCentreX(), b2.getY() + 5.0f }, left));
+        lpg.mouseUp (mev ({ b2.getCentreX(), b2.getY() + 5.0f }, left));
+        check (proc.patterns.getLock (sl, 5, 2, kLockVel) == 127, "click at the top of a bar: VELOCITY 127");
+        lpg.mouseDoubleClick (mev ({ b2.getCentreX(), b2.getCentreY() }, left, 2));
+        check (! proc.patterns.isLocked (sl, 5, 2, kLockVel), "double-click a bar: back to the knob");
+        proc.undoRandom();
+        check (proc.patterns.getLock (sl, 5, 2, kLockVel) == 1, "UNDO takes back the last lock edit");
+        // CC: no number = nothing drawn; drag the CC box up to pick one
+        lpg.param = kLockCC1;
+        proc.map.setCcNumber (5, 0, -1);
+        lpg.mouseDown (mev ({ b2.getCentreX(), b2.getY() + 5.0f }, left)); lpg.mouseUp (mev ({ b2.getCentreX(), b2.getY() + 5.0f }, left));
+        const bool noCc = ! proc.patterns.isLocked (sl, 5, 2, kLockCC1);
+        const auto cr = LockPage::ccDisplayRect (0);
+        lpg.mouseDown (mev (cr.getCentre(), left));
+        lpg.mouseDrag (mev (cr.getCentre().translated (0.0f, -24.0f), left));
+        lpg.mouseUp (mev (cr.getCentre().translated (0.0f, -24.0f), left));
+        const int picked = proc.map.ccNumber (5, 0);
+        lpg.mouseDown (mev ({ b2.getCentreX(), b2.getY() + 5.0f }, left)); lpg.mouseUp (mev ({ b2.getCentreX(), b2.getY() + 5.0f }, left));
+        check (noCc && picked >= 0 && proc.patterns.getLock (sl, 5, 2, kLockCC1) == 127, "CC 1 needs a number first (dragged to " + juce::String (picked) + "), then it locks");
+        proc.map.setCcNumber (5, 0, 74); proc.map.setCcNumber (5, 1, 71);
+        lpg.param = kLockVel;
+        for (int s2 = 0; s2 < 16; s2 += 2) proc.patterns.setLock (sl, 5, s2, kLockVel, (int16_t) (30 + s2 * 6));
+        lpg.touched = 4;
+        auto img = ed->createComponentSnapshot (ed->getLocalBounds(), true, 2.0f);
+        auto f = outDir.getChildFile ("locks_2x.png"); f.deleteFile();
+        if (auto os = f.createOutputStream()) juce::PNGImageFormat().writeImageToStream (img, *os);
+        te->stepsBtn.onClick();
+        check (! te->isLockMode() && ! te->lockPage.isVisible(), "STEPS key: back to the grid");
     }
     // STUTTER button: on while held, off on release
     if (auto* te = dynamic_cast<TrossSeqEditor*> (ed.get()))

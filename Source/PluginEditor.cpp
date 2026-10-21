@@ -961,16 +961,19 @@ TrossSeqEditor::TrossSeqEditor (TrossSeqProcessor& p)
         strip->setTooltip ("Click to play (Cmd/Ctrl-click: accent). Shift-click to rename, Alt-click to lock, right-click to clear and more. "
                            "Records into the pattern while REC is on and the song plays.");
         content.addAndMakeVisible (*strip);
+        laneControls.push_back (strip.get());
         strips.push_back (std::move (strip));
 
         auto& note = addReadout ({ kNoteX, y, kNoteW, (int) kPadH }, 0, 127, [] (double v) { return juce::String ((int) v) + " " + noteName ((int) v); });
         note.onValueChange = [this, t, &note] { proc.map.setNote (t, (int) note.getValue()); };
         note.setTooltip ("MIDI note: drag up/down");
         noteBox[t] = &note;
+        laneControls.push_back (&note);
         auto& ch = addReadout ({ kChanX, y, kChanW, (int) kPadH }, 1, 16, [] (double v) { return juce::String ((int) v); });
         ch.onValueChange = [this, t, &ch] { proc.map.setChannel (t, (int) ch.getValue()); };
         ch.setTooltip ("MIDI channel: drag up/down");
         chanBox[t] = &ch;
+        laneControls.push_back (&ch);
 
         auto mute = std::make_unique<MuteButton> (proc, t);
         mute->setClickingTogglesState (true);
@@ -980,6 +983,7 @@ TrossSeqEditor::TrossSeqEditor (TrossSeqProcessor& p)
         mute->setTooltip ("Click: mute. Shift + hold: solo this track until you let go");
         content.addAndMakeVisible (*mute);
         bAtts.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, "mute" + juce::String (t + 1), *mute));
+        laneControls.push_back (mute.get());
         buttons.push_back (std::move (mute));
 
         auto soloB = std::make_unique<juce::TextButton> ("S");
@@ -991,6 +995,7 @@ TrossSeqEditor::TrossSeqEditor (TrossSeqProcessor& p)
         soloB->setComponentID ("solo" + juce::String (t + 1));
         content.addAndMakeVisible (*soloB);
         bAtts.push_back (std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (proc.apvts, "solo" + juce::String (t + 1), *soloB));
+        laneControls.push_back (soloB.get());
         buttons.push_back (std::move (soloB));
 
         auto learn = std::make_unique<juce::TextButton> ("LEARN");
@@ -1001,6 +1006,7 @@ TrossSeqEditor::TrossSeqEditor (TrossSeqProcessor& p)
         learn->onClick = [this, t] { proc.learnTrack = proc.learnTrack.load() == t ? -1 : t; };
         content.addAndMakeVisible (*learn);
         learnBtn[t] = learn.get();
+        laneControls.push_back (learn.get());
         buttons.push_back (std::move (learn));
     }
 
@@ -1084,6 +1090,25 @@ TrossSeqEditor::TrossSeqEditor (TrossSeqProcessor& p)
         bpmBox.setBounds (1046, 102, 50, 20);
         content.addAndMakeVisible (bpmBox);
     }
+
+    // ---- STEPS / LOCKS: which page the sequencer zone shows (keys under the pattern display)
+    content.addChildComponent (lockPage);
+    lockPage.setBounds (0, kSeqY, 918, kHeight - kSeqY);
+    for (auto* b : { &stepsBtn, &locksBtn })
+    {
+        b->getProperties().set ("style", "key");
+        b->getProperties().set ("led", true);
+        b->setClickingTogglesState (false);
+        content.addAndMakeVisible (*b);
+    }
+    stepsBtn.setBounds (kMasterX + 2, 99, 55, 18);
+    locksBtn.setBounds (kMasterX + 61, 99, 55, 18);
+    stepsBtn.setTooltip ("The step grid");
+    locksBtn.setTooltip ("Parameter locks: per step velocity, gate, nudge, chance, ratchet, pitch and 4 CCs, one lane at a time");
+    stepsBtn.onClick = [this] { setLockMode (false); };
+    locksBtn.onClick = [this] { setLockMode (true); };
+    if (proc.isStandalone()) { stepsBtn.setVisible (false); locksBtn.setVisible (false); }
+    setLockMode (false);
 
     content.addChildComponent (about);   // on top of everything, hidden until the logo is clicked
     about.setBounds (0, 0, kWidth, kHeight);
@@ -1579,12 +1604,6 @@ void TrossSeqEditor::paintPanel (juce::Graphics& g)
     g.setColour (juce::Colours::black.withAlpha (0.05f));
     g.fillRoundedRectangle ((float) kMasterX, 58.0f, (float) kMasterW, 60.0f, 6.0f);
     label (proc.isStandalone() ? "TRANSPORT" : "FOLLOWS HOST", kMasterX, 61, kMasterW);
-    if (! proc.isStandalone())
-    {
-        g.setColour (col::softText);
-        g.setFont (font (8.0f, false, 0.06f));
-        g.drawText (juce::String (juce::roundToInt (proc.currentBpm.load())) + " BPM", kMasterX, 102, kMasterW, 12, juce::Justification::centred);
-    }
 
     // ---- dark sequencer section
     g.setColour (col::orange);
@@ -1672,6 +1691,11 @@ void TrossSeqEditor::timerCallback()
         if (armed || busy || fillWasBusy) { patternPad.repaint(); lcd.repaint(); }
         fillWasBusy = armed || busy;
     }
+    if (lockMode)   // LOCKS page: follows the play position and pattern edits
+    {
+        const int key = proc.patterns.getVersion() * 37 + proc.getPlayStep() * 3 + proc.getCurrentSlot() * 1000 + proc.map.getVersion() * 7;
+        if (key != lastLockPageKey) { lockPage.repaint(); lastLockPageKey = key; }
+    }
     // STUTTER LED: lit while it's on (from the button, a MIDI-mapped key or automation)
     if (const bool st = proc.apvts.getRawParameterValue ("stutter")->load() > 0.5f; st != lastStutter)
     {
@@ -1692,4 +1716,383 @@ void TrossSeqEditor::timerCallback()
     }
 
     lastVersion = v; lastStep = st; lastSlot = slot; lastPending = pend; lastLen = len; lastSel = sel;
+}
+
+// ============================================================ P-LOCKS page
+namespace
+{
+constexpr float kLkTop = 46.0f, kLkH = 240.0f, kLkPad = 5.0f;
+bool centred (int p) { return p == trossseq::kLockNudge || p == trossseq::kLockPitch; }
+juce::String lockValueText (int p, int v)
+{
+    using namespace trossseq;
+    switch (p)
+    {
+        case kLockGate:    return juce::String (v) + "%";
+        case kLockNudge:   return (v > 0 ? "+" : "") + juce::String (v) + "%";
+        case kLockChance:  return juce::String (v) + "%";
+        case kLockRatchet: return "x" + juce::String (v);
+        case kLockPitch:   return (v > 0 ? "+" : "") + juce::String (v);
+        default:           return juce::String (v);
+    }
+}
+}
+
+juce::Rectangle<float> LockPage::laneRect (int t)     { return { (float) kNameX, kLkTop + (float) t * kRowPitch, (float) kNameW, kPadH }; }
+juce::Rectangle<float> LockPage::barRect (int s)      { return { kGridX + (float) s * (kColW + kColGap), kLkTop, kColW, kLkH }; }
+juce::Rectangle<float> LockPage::paramRect (int p)
+{
+    if (p < trossseq::kLockCC1) return { 700.0f, 30.0f + (float) p * 22.0f, 100.0f, 18.0f };
+    const int k = p - trossseq::kLockCC1;
+    return { 700.0f + (float) (k % 2) * 106.0f, 166.0f + (float) (k / 2) * 24.0f, 48.0f, 18.0f };
+}
+juce::Rectangle<float> LockPage::ccDisplayRect (int k) { return paramRect (trossseq::kLockCC1 + k).translated (51.0f, 0.0f).withWidth (52.0f); }
+
+juce::String LockPage::ccLabel (int n)
+{
+    if (n < 0) return "--";
+    static const std::pair<int, const char*> names[] = { { 1, "MOD" }, { 7, "LEVEL" }, { 10, "PAN" }, { 11, "EXPR" }, { 71, "RESO" },
+                                                         { 72, "RELEASE" }, { 73, "ATTACK" }, { 74, "CUTOFF" }, { 75, "DECAY" } };
+    for (auto& nm : names) if (nm.first == n) return juce::String (n) + " " + nm.second;
+    return "CC " + juce::String (n);
+}
+
+int LockPage::unlockedValue (int step) const
+{
+    using namespace trossseq;
+    if (param == kLockVel)
+        return (int) (proc.patterns.cell (proc.getCurrentSlot(), 0, step) ? proc.apvts.getRawParameterValue ("accvel")->load()
+                                                                          : proc.apvts.getRawParameterValue ("velocity")->load());
+    if (param == kLockGate) return (int) proc.apvts.getRawParameterValue ("gate")->load();
+    return lockInfo (param).unlocked;
+}
+
+int LockPage::valueAt (float y) const
+{
+    const auto& li = trossseq::lockInfo (param);
+    const float top = kLkTop + kLkPad, bot = kLkTop + kLkH - kLkPad;
+    const float n = juce::jlimit (0.0f, 1.0f, (bot - y) / (bot - top));
+    return juce::roundToInt (li.lo + n * (float) (li.hi - li.lo));
+}
+
+void LockPage::paint (juce::Graphics& g)
+{
+    using namespace trossseq;
+    static const juce::Colour groupTop[4] = { col::cream1, col::grey1, col::orange1, col::yellow1 };
+    static const juce::Colour groupBot[4] = { col::cream2, col::grey2, col::orange2, col::yellow2 };
+    g.setGradientFill (juce::ColourGradient (col::darkTop, 0, 0, col::darkBottom, 0, (float) getHeight(), false));
+    g.fillAll();
+    const int slot = proc.getCurrentSlot(), playing = proc.getPlayStep();
+    const auto& li = lockInfo (param);
+
+    g.setColour (col::darkLabel);
+    g.setFont (font (9.0f, false, 0.2f));
+    g.drawText ("LANE", kMargin, 12, 46, 12, juce::Justification::centredLeft);
+    g.drawText ("LOCK PARAMETER", 700, 12, 200, 12, juce::Justification::centredLeft);
+    for (int s = 0; s < kNumSteps; ++s)
+    {
+        const auto x = kGridX + (float) s * (kColW + kColGap);
+        g.setColour (s % 4 == 0 ? col::orange : col::numText);
+        g.setFont (font (9.5f, s % 4 == 0));
+        g.drawText (juce::String (s + 1), juce::Rectangle<float> (x, 12.0f, kColW, 12.0f), juce::Justification::centred);
+        drawLed (g, { x + kColW * 0.5f, 34.0f }, 7.0f, s == playing);
+    }
+
+    // lanes: pick one; a dot = it has locks in this pattern
+    for (int t = 0; t < kNumTracks; ++t)
+    {
+        const auto r = laneRect (t);
+        g.setColour (col::stripBg);
+        g.fillRoundedRectangle (r, 2.0f);
+        const bool spare = proc.getTrackName (t) == "---";
+        g.setColour (t == lane ? col::stripText : col::darkLabel.withAlpha (spare ? 0.4f : 1.0f));
+        g.setFont (font (10.0f, true, 0.1f));
+        g.drawText (proc.getTrackName (t), r, juce::Justification::centred);
+        if (t == lane) { g.setColour (col::accText); g.drawRoundedRectangle (r.reduced (0.5f), 2.0f, 1.2f); }
+        drawLed (g, { r.getRight() - 9.0f, r.getCentreY() }, 4.0f, proc.patterns.laneHasLocks (slot, t));
+    }
+
+    // the bars
+    const float top = kLkTop + kLkPad, bot = kLkTop + kLkH - kLkPad;
+    auto yOf = [&] (int v) { return bot - (float) (v - li.lo) / (float) (li.hi - li.lo) * (bot - top); };
+    const float zeroY = centred (param) ? yOf (0) : bot;
+    const bool isCc = param >= kLockCC1;
+    const bool ccUnset = isCc && proc.map.ccNumber (lane, param - kLockCC1) < 0;
+    for (int s = 0; s < kNumSteps; ++s)
+    {
+        const auto r = barRect (s);
+        g.setColour (juce::Colour (0xff141414));
+        g.fillRoundedRectangle (r, 3.0f);
+        g.setColour (juce::Colour (0xff222222));
+        for (int k = 1; k < 4; ++k) g.fillRect (r.getX() + 2.0f, r.getY() + r.getHeight() * (float) k / 4.0f, r.getWidth() - 4.0f, 1.0f);
+        if (centred (param)) { g.setColour (juce::Colour (0xff3a3a3a)); g.fillRect (r.getX() + 2.0f, zeroY, r.getWidth() - 4.0f, 1.0f); }
+        const bool locked = proc.patterns.isLocked (slot, lane, s, param);
+        const bool stepOn = proc.patterns.cell (slot, lane + 1, s);
+        if (! locked && isCc) { }
+        else
+        {
+            const int v = locked ? proc.patterns.getLock (slot, lane, s, param) : unlockedValue (s);
+            const float y = yOf (v);
+            auto bar = juce::Rectangle<float> (r.getX() + 4.0f, juce::jmin (y, zeroY), r.getWidth() - 8.0f, std::abs (zeroY - y));
+            if (param == kLockRatchet && locked)   // ratchets: one slim bar per hit
+            {
+                const float w = (r.getWidth() - 8.0f) / 4.0f;
+                for (int k = 0; k < v; ++k)
+                {
+                    g.setColour (col::ledOn.withAlpha (stepOn ? 1.0f : 0.45f));
+                    g.fillRoundedRectangle (r.getX() + 4.0f + (float) k * w + 1.0f, bot - 70.0f, w - 2.0f, 70.0f, 1.5f);
+                }
+            }
+            else
+            {
+                if (locked) g.setGradientFill (juce::ColourGradient::vertical (juce::Colour (0xffff7a45).withAlpha (stepOn ? 1.0f : 0.5f), bar.getY(),
+                                                                                col::orange1.withAlpha (stepOn ? 1.0f : 0.5f), bar.getBottom()));
+                else g.setColour (juce::Colour (0xff4a3028).withAlpha (stepOn ? 1.0f : 0.5f));
+                g.fillRoundedRectangle (bar, 2.0f);
+                // a cap in the pad colour of the step's group, at the value
+                const auto cap = juce::Rectangle<float> (r.getX() + 2.0f, y - 4.0f, r.getWidth() - 4.0f, 8.0f);
+                g.setGradientFill (juce::ColourGradient::vertical (groupTop[s / 4].withAlpha (locked ? 1.0f : 0.55f), cap.getY(),
+                                                                    groupBot[s / 4].withAlpha (locked ? 1.0f : 0.55f), cap.getBottom()));
+                g.fillRoundedRectangle (cap, 2.0f);
+            }
+        }
+        // value read-out
+        const auto vr = juce::Rectangle<float> (r.getX(), r.getBottom() + 6.0f, r.getWidth(), 18.0f);
+        g.setColour (col::lcdBg); g.fillRoundedRectangle (vr, 2.5f);
+        g.setColour (juce::Colours::black); g.drawRoundedRectangle (vr.reduced (0.5f), 2.5f, 1.0f);
+        g.setFont (mono (10.0f));
+        g.setColour (locked ? col::lcdText : col::lcdText.withAlpha (0.3f));
+        g.drawText (locked ? lockValueText (param, proc.patterns.getLock (slot, lane, s, param)) : juce::String ("-"), vr, juce::Justification::centred);
+    }
+    if (! isCc && ! centred (param) && param != kLockRatchet)   // the knob's level, for steps without a lock
+    {
+        const float y = yOf (param == kLockVel ? (int) proc.apvts.getRawParameterValue ("velocity")->load() : unlockedValue (0));
+        g.setColour (col::darkLabel.withAlpha (0.55f));
+        for (float x = kGridX; x < kGridR; x += 6.0f) g.fillRect (x, y, 3.0f, 1.0f);
+    }
+    if (ccUnset)
+    {
+        g.setColour (col::darkLabel);
+        g.setFont (font (10.0f, true, 0.12f));
+        g.drawText ("PICK A CC NUMBER FOR " + juce::String (li.name) + " ON THE RIGHT", juce::Rectangle<float> (kGridX, kLkTop + kLkH * 0.4f, kGridR - kGridX, 20.0f),
+                    juce::Justification::centred);
+    }
+
+    // parameter buttons
+    static const char* ranges[6] = { "1-127", "5-95 %", "+/- 1/2 STEP", "0-100 %", "1-4 HITS", "+/- 12 SEMI" };
+    for (int p = 0; p < kNumLockParams; ++p)
+    {
+        const auto r = paramRect (p);
+        const bool on = p == param;
+        g.setColour (on ? juce::Colour (0xff3a2a22) : juce::Colour (0xff333333));
+        g.fillRoundedRectangle (r, 2.0f);
+        g.setColour (juce::Colour (0xff444444)); g.fillRect (r.getX() + 1.0f, r.getY(), r.getWidth() - 2.0f, 1.0f);
+        drawLed (g, { r.getX() + 9.0f, r.getCentreY() }, 5.0f, on);
+        g.setColour (on ? juce::Colours::white : col::rowText);
+        g.setFont (font (8.5f, true, 0.1f));
+        g.drawText (lockInfo (p).name, r.withTrimmedLeft (17.0f), juce::Justification::centredLeft);
+        if (p < kLockCC1)
+        {
+            g.setColour (col::darkLabel);
+            g.setFont (font (8.0f, false, 0.05f));
+            g.drawText (ranges[p], juce::Rectangle<float> (806.0f, r.getY(), 104.0f, r.getHeight()), juce::Justification::centredLeft);
+        }
+        else
+        {
+            const auto d = ccDisplayRect (p - kLockCC1);
+            g.setColour (col::lcdBg); g.fillRoundedRectangle (d, 2.5f);
+            g.setColour (juce::Colours::black); g.drawRoundedRectangle (d.reduced (0.5f), 2.5f, 1.0f);
+            const int n = proc.map.ccNumber (lane, p - kLockCC1);
+            g.setColour (n >= 0 ? col::lcdText : col::lcdText.withAlpha (0.35f));
+            g.setFont (mono (8.5f));
+            g.drawText (ccLabel (n), d, juce::Justification::centred, true);
+        }
+    }
+
+    // read-out of the touched step
+    const auto lcdR = juce::Rectangle<float> (700.0f, 222.0f, 208.0f, 40.0f);
+    g.setColour (col::lcdBg); g.fillRoundedRectangle (lcdR, 3.0f);
+    g.setColour (juce::Colours::black); g.drawRoundedRectangle (lcdR.reduced (0.5f), 3.0f, 1.0f);
+    g.setColour (col::lcdText);
+    g.setFont (mono (11.5f));
+    juce::String l1 = proc.getTrackName (lane), l2 = li.name;
+    if (touched >= 0)
+    {
+        l1 << "  STEP " << (touched + 1);
+        l2 << "  " << (proc.patterns.isLocked (slot, lane, touched, param) ? lockValueText (param, proc.patterns.getLock (slot, lane, touched, param)) : juce::String ("KNOB"));
+    }
+    if (isCc) l2 = juce::String (li.name) + "  " + ccLabel (proc.map.ccNumber (lane, param - kLockCC1)) + (touched >= 0 && proc.patterns.isLocked (slot, lane, touched, param)
+                                                                                                       ? " = " + juce::String (proc.patterns.getLock (slot, lane, touched, param)) : juce::String());
+    g.drawText (l1, lcdR.withHeight (20.0f).translated (0, 1.0f), juce::Justification::centred);
+    g.drawText (l2, lcdR.withTrimmedTop (19.0f), juce::Justification::centred, true);
+
+    g.setColour (col::darkLabel);
+    g.setFont (font (8.0f, false, 0.08f));
+    const char* help[] = { "DRAG UP/DOWN: LOCK - DRAG ACROSS: DRAW", "SHIFT-DRAG: FINE - DOUBLE-CLICK: UNLOCK",
+                           "RIGHT-CLICK: CLEAR - CLICK A CC BOX: NUMBER" };
+    for (int i = 0; i < 3; ++i) g.drawText (help[i], 700, 270 + i * 13, 215, 12, juce::Justification::centredLeft);
+}
+
+void LockPage::setFromMouse (int step, float y)
+{
+    if (step < 0 || step >= trossseq::kNumSteps) return;
+    if (param >= trossseq::kLockCC1 && proc.map.ccNumber (lane, param - trossseq::kLockCC1) < 0) return;   // no CC number yet
+    proc.patterns.setLock (proc.getCurrentSlot(), lane, step, param, (int16_t) valueAt (y));
+    touched = step;
+    repaint();
+}
+
+void LockPage::mouseDown (const juce::MouseEvent& e)
+{
+    using namespace trossseq;
+    const auto pos = e.position;
+    barDrag = false; ccDrag = -1;
+    for (int t = 0; t < kNumTracks; ++t) if (laneRect (t).contains (pos)) { lane = t; touched = -1; repaint(); return; }
+    for (int p = 0; p < kNumLockParams; ++p) if (paramRect (p).contains (pos)) { param = p; repaint(); return; }
+    for (int k = 0; k < 4; ++k)
+        if (ccDisplayRect (k).contains (pos))
+        {
+            if (e.mods.isPopupMenu()) { showCcMenu (k); return; }
+            ccDrag = k; ccMoved = false; dragStartY = pos.y; ccStartNum = proc.map.ccNumber (lane, k);
+            return;
+        }
+    for (int s = 0; s < kNumSteps; ++s)
+        if (barRect (s).expanded (kColGap * 0.5f, 0.0f).contains (pos))
+        {
+            if (e.mods.isPopupMenu())
+            {
+                juce::PopupMenu m;
+                m.addSectionHeader (proc.getTrackName (lane) + "  -  " + lockInfo (param).name);
+                m.addItem (1, "Clear " + juce::String (lockInfo (param).name) + " on this lane");
+                m.addItem (2, "Clear all locks on this lane");
+                m.addItem (3, "Clear all locks in this pattern");
+                m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+                                 [safe = juce::Component::SafePointer<LockPage> (this)] (int id)
+                                 {
+                                     if (safe == nullptr || id <= 0) return;
+                                     auto& pr = safe->proc;
+                                     pr.pushLockUndo();
+                                     const int sl = pr.getCurrentSlot();
+                                     if (id == 1) pr.patterns.clearLocks (sl, safe->lane, safe->param);
+                                     if (id == 2) pr.patterns.clearLocks (sl, safe->lane);
+                                     if (id == 3) pr.patterns.clearLocks (sl);
+                                     safe->repaint();
+                                 });
+                return;
+            }
+            proc.pushLockUndo();
+            barDrag = true; dragStep = s; dragStartY = pos.y;
+            if (e.mods.isShiftDown())   // fine: start from the current value
+            {
+                const int sl = proc.getCurrentSlot();
+                fineStartValue = proc.patterns.isLocked (sl, lane, s, param) ? proc.patterns.getLock (sl, lane, s, param) : unlockedValue (s);
+                proc.patterns.setLock (sl, lane, s, param, (int16_t) fineStartValue);
+                touched = s; repaint();
+            }
+            else setFromMouse (s, pos.y);
+            return;
+        }
+}
+
+void LockPage::mouseDrag (const juce::MouseEvent& e)
+{
+    using namespace trossseq;
+    if (ccDrag >= 0)
+    {
+        const int d = juce::roundToInt ((dragStartY - e.position.y) / 4.0f);
+        if (d != 0) ccMoved = true;
+        if (ccMoved) { proc.map.setCcNumber (lane, ccDrag, juce::jlimit (-1, 127, (ccStartNum < 0 ? -1 : ccStartNum) + d)); repaint(); }
+        return;
+    }
+    if (! barDrag) return;
+    if (e.mods.isShiftDown())
+    {
+        const auto& li = lockInfo (param);
+        const float perPixel = (float) (li.hi - li.lo) / (kLkH - 2.0f * kLkPad) * 0.25f;
+        const int v = juce::jlimit (li.lo, li.hi, juce::roundToInt ((float) fineStartValue + (dragStartY - e.position.y) * perPixel));
+        proc.patterns.setLock (proc.getCurrentSlot(), lane, dragStep, param, (int16_t) v);
+        touched = dragStep; repaint();
+        return;
+    }
+    int s = -1;
+    for (int k = 0; k < kNumSteps; ++k) if (barRect (k).expanded (kColGap * 0.5f, 1000.0f).contains (e.position)) s = k;
+    if (s < 0) return;
+    // drawing across: fill every step between the last one and this one
+    const int from = juce::jmin (s, dragStep), to = juce::jmax (s, dragStep);
+    for (int k = from; k <= to; ++k) setFromMouse (k, e.position.y);
+    dragStep = s;
+    touched = s;
+}
+
+void LockPage::mouseUp (const juce::MouseEvent&)
+{
+    if (ccDrag >= 0 && ! ccMoved) showCcMenu (ccDrag);
+    ccDrag = -1; barDrag = false;
+}
+
+void LockPage::mouseDoubleClick (const juce::MouseEvent& e)
+{
+    using namespace trossseq;
+    for (int k = 0; k < 4; ++k)
+        if (ccDisplayRect (k).contains (e.position))
+        {
+            auto* w = new juce::AlertWindow ("CC number", "CC number for " + proc.getTrackName (lane) + " " + lockInfo (kLockCC1 + k).name + " (0-127, empty = not used)",
+                                             juce::MessageBoxIconType::NoIcon, this);
+            w->addTextEditor ("n", proc.map.ccNumber (lane, k) >= 0 ? juce::String (proc.map.ccNumber (lane, k)) : juce::String());
+            w->addButton ("OK", 1, juce::KeyPress (juce::KeyPress::returnKey));
+            w->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+            w->enterModalState (true, juce::ModalCallbackFunction::create ([safe = juce::Component::SafePointer<LockPage> (this), w, k] (int r)
+            {
+                if (safe != nullptr && r == 1)
+                {
+                    const auto txt = w->getTextEditorContents ("n").trim();
+                    safe->proc.map.setCcNumber (safe->lane, k, txt.isEmpty() ? -1 : juce::jlimit (0, 127, txt.getIntValue()));
+                    safe->repaint();
+                }
+            }), true);
+            return;
+        }
+    for (int s = 0; s < kNumSteps; ++s)
+        if (barRect (s).expanded (kColGap * 0.5f, 0.0f).contains (e.position))
+        {
+            proc.patterns.setLock (proc.getCurrentSlot(), lane, s, param, kNoLock);   // back to the knob
+            touched = s; repaint();
+            return;
+        }
+}
+
+void LockPage::showCcMenu (int k)
+{
+    juce::PopupMenu m;
+    m.addSectionHeader (proc.getTrackName (lane) + "  -  CC " + juce::String (k + 1));
+    const int cur = proc.map.ccNumber (lane, k);
+    m.addItem (1000, "Not used", true, cur < 0);
+    for (int n : { 1, 7, 10, 11, 71, 72, 73, 74, 75 }) m.addItem (n + 1, ccLabel (n), true, cur == n);
+    juce::PopupMenu all;
+    for (int g = 0; g < 8; ++g)
+    {
+        juce::PopupMenu sub;
+        for (int n = g * 16; n < g * 16 + 16; ++n) sub.addItem (n + 1, "CC " + juce::String (n), true, cur == n);
+        all.addSubMenu (juce::String (g * 16) + " - " + juce::String (g * 16 + 15), sub);
+    }
+    m.addSubMenu ("Number", all);
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+                     [safe = juce::Component::SafePointer<LockPage> (this), k] (int id)
+                     {
+                         if (safe == nullptr || id <= 0) return;
+                         safe->proc.map.setCcNumber (safe->lane, k, id == 1000 ? -1 : id - 1);
+                         safe->repaint();
+                     });
+}
+
+void TrossSeqEditor::setLockMode (bool on)
+{
+    lockMode = on;
+    grid.setVisible (! on);
+    for (auto* c : laneControls) c->setVisible (! on);
+    lockPage.setVisible (on);
+    if (on) lockPage.toFront (false);
+    stepsBtn.setToggleState (! on, juce::dontSendNotification);
+    locksBtn.setToggleState (on, juce::dontSendNotification);
+    if (about.getParentComponent() != nullptr) about.toFront (false);
 }

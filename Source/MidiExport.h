@@ -44,7 +44,19 @@ struct MidiExport
                 for (int tr = 0; tr < kNumTracks; ++tr)
                     if (p.cell (slot, tr + 1, st))
                     {
-                        const int vel = juce::jlimit (1, 127, accent ? s.accentVelocity : s.velocity);
+                        // parameter locks: velocity, gate, pitch, nudge, ratchet and CCs go into the clip;
+                        // CHANCE can't be written into a clip, so a step plays unless its chance is 0 %
+                        auto lk = [&] (int q) { return p.getLock (slot, tr, st, q); };
+                        if (lk (kLockChance) == 0) continue;
+                        int vel = juce::jlimit (1, 127, accent ? s.accentVelocity : s.velocity);
+                        if (lk (kLockVel) != kNoLock) vel = lk (kLockVel);
+                        const int nn = juce::jlimit (0, 127, map.note (tr) + (lk (kLockPitch) != kNoLock ? lk (kLockPitch) : 0));
+                        const int tn = juce::jmax (0, t + (lk (kLockNudge) != kNoLock ? juce::roundToInt (lk (kLockNudge) / 100.0 * kTicksPerStep) : 0));
+                        int gt = lk (kLockGate) != kNoLock ? juce::jlimit (1, kTicksPerStep - 1, juce::roundToInt (lk (kLockGate) / 100.0 * kTicksPerStep)) : gateTicks;
+                        for (int k = 0; k < 4; ++k)
+                            if (map.ccNumber (tr, k) >= 0 && lk (kLockCC1 + k) != kNoLock)
+                                seq.addEvent (juce::MidiMessage::controllerEvent (map.channel (tr), map.ccNumber (tr, k), lk (kLockCC1 + k)), tn);
+                        const int hits = lk (kLockRatchet) != kNoLock ? juce::jlimit (1, 4, (int) lk (kLockRatchet)) : 1;
                         if (p.flam (slot, tr + 1, st))   // grace notes just before, softer (flam 1, drag 2, ruff 3)
                         {
                             const auto fs = p.flamStyle (slot, tr + 1, st);
@@ -58,8 +70,13 @@ struct MidiExport
                                 seq.addEvent (juce::MidiMessage::noteOff (map.channel (tr), map.note (tr)), g + juce::jmax (1, gap * 3 / 4));
                             }
                         }
-                        seq.addEvent (juce::MidiMessage::noteOn (map.channel (tr), map.note (tr), (juce::uint8) vel), t);
-                        seq.addEvent (juce::MidiMessage::noteOff (map.channel (tr), map.note (tr)), t + gateTicks);
+                        const int spacing = kTicksPerStep / hits;
+                        if (hits > 1) gt = juce::jmin (gt, juce::jmax (1, spacing * 3 / 4));
+                        for (int k = 0; k < hits; ++k)
+                        {
+                            seq.addEvent (juce::MidiMessage::noteOn (map.channel (tr), nn, (juce::uint8) vel), tn + k * spacing);
+                            seq.addEvent (juce::MidiMessage::noteOff (map.channel (tr), nn), tn + k * spacing + gt);
+                        }
                     }
             }
             start += s.length * kTicksPerStep;

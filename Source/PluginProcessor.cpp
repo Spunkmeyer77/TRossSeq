@@ -114,10 +114,11 @@ void TrossSeqProcessor::prepareToPlay (double sr, int samplesPerBlock)
     wasPlaying = false;
     clock.stop();
     graceClock.stop();
+    nudgeClock.stop();
     numSched = 0;
     numHeld = 0;
     skipSteps = skipGrace = 0;
-    lastFiredStep = lastGraceStep = LLONG_MIN;
+    lastFiredStep = lastGraceStep = lastNudgeStep = LLONG_MIN; skipNudge = 0;
     playStep = -1;
     numPending = 0;
     haveBlockTime = false;
@@ -164,7 +165,8 @@ juce::String TrossSeqProcessor::mapSignature() const
 {
     juce::String sig;
     for (int t = 0; t < kNumTracks; ++t)
-        sig << getTrackName (t) << '|' << map.note (t) << '|' << map.channel (t) << '|' << (locked[t].load() ? 1 : 0) << ';';
+        sig << getTrackName (t) << '|' << map.note (t) << '|' << map.channel (t) << '|' << (locked[t].load() ? 1 : 0)
+            << '|' << map.ccNumber (t, 0) << ',' << map.ccNumber (t, 1) << ',' << map.ccNumber (t, 2) << ',' << map.ccNumber (t, 3) << ';';
     return sig;
 }
 
@@ -234,6 +236,8 @@ juce::ValueTree TrossSeqProcessor::mapToTree() const
         tr.setProperty ("note", map.note (i), nullptr);
         tr.setProperty ("channel", map.channel (i), nullptr);
         tr.setProperty ("locked", locked[i].load(), nullptr);
+        tr.setProperty ("cc", juce::String (map.ccNumber (i, 0)) + " " + juce::String (map.ccNumber (i, 1)) + " "
+                              + juce::String (map.ccNumber (i, 2)) + " " + juce::String (map.ccNumber (i, 3)), nullptr);
         t.appendChild (tr, nullptr);
     }
     return t;
@@ -250,6 +254,8 @@ void TrossSeqProcessor::mapFromTree (const juce::ValueTree& t)
         map.setChannel (i, (int) tr.getProperty ("channel", map.channel (i)));
         setTrackName (i, tr.getProperty ("name", getTrackName (i)).toString());
         locked[i] = (bool) tr.getProperty ("locked", false);
+        juce::StringArray cc; cc.addTokens (tr.getProperty ("cc", "-1 -1 -1 -1").toString(), " ", "");
+        for (int k = 0; k < 4; ++k) map.setCcNumber (i, k, k < cc.size() ? cc[k].getIntValue() : -1);
     }
     if (t.hasProperty ("mapName"))   // which map this is, and how it looked when picked (for the * mark)
     {
@@ -406,6 +412,9 @@ TrossSeqProcessor::SlotSnap TrossSeqProcessor::snap (int slot) const
         sn.flams[r] = patterns.getFlams (slot, r);
         for (int s = 0; s < kNumSteps; ++s) sn.styles[r][s] = patterns.getFlamStyle (slot, r, s);
     }
+    for (int t = 0; t < kNumTracks; ++t)
+        for (int s = 0; s < kNumSteps; ++s)
+            for (int p = 0; p < kNumLockParams; ++p) sn.locks[t][s][p] = patterns.getLock (slot, t, s, p);
     return sn;
 }
 
@@ -417,6 +426,9 @@ void TrossSeqProcessor::restore (const SlotSnap& sn)
         patterns.setFlams (sn.slot, r, sn.flams[r]);
         for (int s = 0; s < kNumSteps; ++s) patterns.setFlamStyle (sn.slot, r, s, sn.styles[r][s]);
     }
+    for (int t = 0; t < kNumTracks; ++t)
+        for (int s = 0; s < kNumSteps; ++s)
+            for (int p = 0; p < kNumLockParams; ++p) patterns.setLock (sn.slot, t, s, p, sn.locks[t][s][p]);
 }
 
 void TrossSeqProcessor::pushUndo (std::initializer_list<int> slots)
@@ -449,7 +461,11 @@ void TrossSeqProcessor::clearRow (int row, bool allPatterns)
     if (row < 0 || row >= kNumRows) return;
     if (allPatterns) pushUndoAllSlots(); else pushUndo ({ currentSlot.load() });
     for (int sl = 0; sl < kNumSlots; ++sl)
-        if (allPatterns || sl == currentSlot.load()) patterns.set (sl, row, 0);
+        if (allPatterns || sl == currentSlot.load())
+        {
+            patterns.set (sl, row, 0);
+            if (row > 0) patterns.clearLocks (sl, row - 1);   // the lane's parameter locks go too
+        }
 }
 
 void TrossSeqProcessor::clearRowFlams (int row, bool allPatterns)
@@ -518,9 +534,9 @@ void TrossSeqProcessor::emit (const juce::MidiMessage& m, int sample, bool fromS
     if (portSpy) portSpy (m, blockCounter + sample);
 }
 
-void TrossSeqProcessor::noteOn (int track, int velocity, int sample, juce::int64 gateSamples, bool fromSeq, juce::int64 hostSample)
+void TrossSeqProcessor::noteOn (int track, int velocity, int sample, juce::int64 gateSamples, bool fromSeq, juce::int64 hostSample, int pitch)
 {
-    const int ch = map.channel (track), nn = map.note (track);
+    const int ch = map.channel (track), nn = juce::jlimit (0, 127, map.note (track) + pitch);
     // the same note still sounding: end it first so the drum box sees a fresh hit
     for (int i = 0; i < numPending; ++i)
         if (pending[i].channel == ch && pending[i].note == nn)
@@ -646,14 +662,62 @@ double TrossSeqProcessor::stutterLength (int i)
     return len[juce::jlimit (0, 4, i)];
 }
 
-void TrossSeqProcessor::playNotes (int step, int sample, juce::int64 gateSamples, juce::int64 hostSample)
+// the step's notes. skipNudged: lanes with a NUDGE lock on this step are left to the nudge clock
+void TrossSeqProcessor::playNotes (int step, int sample, juce::int64 gateSamples, juce::int64 hostSample, bool skipNudged)
 {
     const int slot = currentSlot.load();
-    const bool accent = patterns.cell (slot, 0, step);
-    const int vel = (int) (accent ? raw.accentVel->load() : raw.velocity->load());
     for (int t = 0; t < kNumTracks; ++t)
         if (patterns.cell (slot, t + 1, step) && audible (t))
-            noteOn (t, vel, sample, gateSamples, true, hostSample);
+        {
+            if (skipNudged && patterns.isLocked (slot, t, step, kLockNudge) && patterns.getLock (slot, t, step, kLockNudge) != 0) continue;
+            playTrack (slot, step, t, sample, gateSamples, hostSample);
+        }
+}
+
+// one lane's hit on one step, with its parameter locks: CHANCE, VELOCITY, GATE, PITCH, RATCHET and the 4 CCs
+void TrossSeqProcessor::playTrack (int slot, int step, int t, int sample, juce::int64 gateSamples, juce::int64 hostSample)
+{
+    auto lock = [&] (int p) { return patterns.getLock (slot, t, step, p); };
+    if (const auto c = lock (kLockChance); c != kNoLock && chanceRnd.nextInt (100) >= c) return;   // not this time
+    const bool accent = patterns.cell (slot, 0, step);
+    int vel = (int) (accent ? raw.accentVel->load() : raw.velocity->load());
+    if (const auto v = lock (kLockVel); v != kNoLock) vel = v;
+    if (const auto g = lock (kLockGate); g != kNoLock) gateSamples = (juce::int64) std::round (g / 100.0 * curSamplesPerStep);
+    const int pitch = lock (kLockPitch) != kNoLock ? lock (kLockPitch) : 0;
+    const int ch = map.channel (t);
+    for (int k = 0; k < 4; ++k)   // CC locks go out just before the note
+        if (const int n = map.ccNumber (t, k); n >= 0)
+            if (const auto v = lock (kLockCC1 + k); v != kNoLock)
+                emit (juce::MidiMessage::controllerEvent (ch, n, juce::jlimit (0, 127, (int) v)), sample, true, hostSample);
+    const int hits = lock (kLockRatchet) != kNoLock ? juce::jlimit (1, 4, (int) lock (kLockRatchet)) : 1;
+    if (hits > 1)
+    {
+        const auto spacing = (juce::int64) std::round (curSamplesPerStep / hits);
+        gateSamples = juce::jmin (gateSamples, juce::jmax ((juce::int64) 1, spacing * 3 / 4));
+        for (int k = 1; k < hits && numSched < kMaxSched; ++k)
+        {
+            SchedNote n; n.track = t; n.velocity = vel; n.due = sample + k * spacing; n.gate = gateSamples; n.pitch = pitch; n.kind = 0;
+            sched[numSched++] = n;
+        }
+    }
+    noteOn (t, vel, sample, gateSamples, true, hostSample, pitch);
+}
+
+// which pattern will play at absStep (the nudge clock looks half a step ahead, across pattern changes)
+int TrossSeqProcessor::slotForStep (long long absStep, int len) const
+{
+    const int w = wrapStep (absStep, len);
+    const int chained = chainSlotFor (absStep, len);
+    if (w == 0 && fillQueued.load() >= 0) return fillQueued.load();
+    if (fillPlaying.load())
+    {
+        if (w != 0) return currentSlot.load();
+        if (chained >= 0) return chained;
+        return pendingSlot.load() >= 0 ? pendingSlot.load() : fillReturn;
+    }
+    if (chained >= 0) return chained;
+    if (w == 0 && pendingSlot.load() >= 0) return pendingSlot.load();
+    return currentSlot.load();
 }
 
 bool TrossSeqProcessor::audible (int t) const
@@ -760,6 +824,8 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     currentBpm.store (bpm);
     const double sixteenthsPerSample = bpm / 60.0 * 4.0 / sampleRate;
     const double samplesPerStep = 1.0 / sixteenthsPerSample;
+    curSamplesPerStep = samplesPerStep;
+    nudgeClock.swingAmount = StepClock::swingFromPercent (raw.swing->load());
     const auto gateSamples = (juce::int64) std::round (raw.gate->load() / 100.0 * samplesPerStep);
     // grace notes are looked for this far ahead: the longest flam spacing, but never more than half a step
     const double graceLook16 = juce::jmin (0.45, FlamStyle::kMaxSpacingMs / 1000.0 * sampleRate * sixteenthsPerSample);
@@ -797,13 +863,14 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
         wasPlaying = false;
         clock.stop();
         graceClock.stop();
+        nudgeClock.stop();
         numSched = 0;
         numHeld = 0;
         playStep = -1;
         stutActive = false; stutShown = false;
         if (fillPlaying.load()) { fillPlaying = false; currentSlot = fillReturn; }   // stopped mid-fill: back to the pattern
         skipSteps = skipGrace = 0;
-        lastFiredStep = lastGraceStep = LLONG_MIN;
+        lastFiredStep = lastGraceStep = lastNudgeStep = LLONG_MIN; skipNudge = 0;
     }
 
     const double q0 = ppq * 4.0;   // position in 16ths at the block start
@@ -813,6 +880,7 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
     {
         skipSteps = lastFiredStep == LLONG_MIN ? 0 : (int) juce::jlimit (0LL, 64LL, lastFiredStep - clock.firstAt (lastQEnd) + 1);
         skipGrace = lastGraceStep == LLONG_MIN ? 0 : (int) juce::jlimit (0LL, 64LL, lastGraceStep - clock.firstAt (lastQEnd + graceLook16) + 1);
+        skipNudge = lastNudgeStep == LLONG_MIN ? 0 : (int) juce::jlimit (0LL, 64LL, lastNudgeStep - clock.firstAt (lastQEnd + 0.5) + 1);
         const auto ticksAhead = juce::jmax ((juce::int64) 0, lastClockTick - ((juce::int64) std::ceil (lastQEnd * 6.0 - 1e-9) - 1));
         lastClockTick = (juce::int64) std::ceil (q0 * 6.0 - 1e-9) - 1 + ticksAhead;
     }
@@ -865,8 +933,33 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
             if (grace >= 0 && skipGrace > 0) { --skipGrace; grace = -1; }
             if (grace >= 0) lastGraceStep = grace;
             if (grace >= 0 && seqOn && ! stutActive) doGrace (wrapStep (grace, len), grace, len, i, graceLookSamples);
-            for (int n = 0; n < numSched;)   // grace notes due now
-                if (sched[n].due <= i) { noteOn (sched[n].track, sched[n].velocity, i, sched[n].gate, true); sched[n] = sched[--numSched]; }
+            // ---- NUDGE: a clock half a step ahead hands nudged lanes to the scheduler, early or late
+            auto nstep = nudgeClock.advance (q + ahead16 + 0.5, ahead16, q + 0.5);
+            if (nstep >= 0 && skipNudge > 0) { --skipNudge; nstep = -1; }
+            if (nstep >= 0)
+            {
+                lastNudgeStep = nstep;
+                if (seqOn && ! stutActive)
+                {
+                    const int ns = wrapStep (nstep, len), nslot = slotForStep (nstep, len);
+                    for (int t = 0; t < kNumTracks && numSched < kMaxSched; ++t)
+                        if (patterns.cell (nslot, t + 1, ns) && patterns.isLocked (nslot, t, ns, kLockNudge))
+                            if (const auto nu = patterns.getLock (nslot, t, ns, kLockNudge); nu != 0)
+                            {
+                                SchedNote n; n.track = t; n.kind = 1; n.slot = nslot; n.step = ns;
+                                n.due = i + (juce::int64) std::round ((clock.stepTime (nstep) - (q + ahead16) + nu / 100.0) * samplesPerStep);
+                                sched[numSched++] = n;
+                            }
+                }
+            }
+            for (int n = 0; n < numSched;)   // grace notes, ratchet repeats and nudged steps due now
+                if (sched[n].due <= i)
+                {
+                    const auto sn = sched[n];
+                    sched[n] = sched[--numSched];
+                    if (sn.kind == 1) { if (audible (sn.track)) playTrack (sn.slot, sn.step, sn.track, i, gateSamples, -1); }
+                    else noteOn (sn.track, sn.velocity, i, sn.gate, true, -1, sn.pitch);
+                }
                 else ++n;
             auto step = clock.advance (q + ahead16, ahead16, q);
             if (step >= 0 && skipSteps > 0) { --skipSteps; step = -1; }   // already played before the loop
@@ -893,7 +986,7 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
                     if (at >= -1e-9 && at > stutLastO + 1e-12 && at <= o + 1e-9)
                     {
                         playStep = wrapStep (n, len);
-                        if (seqOn) playNotes (wrapStep (n, len), i, juce::jmin (gateSamples, (juce::int64) (stutLen * samplesPerStep * 0.9)), -1);
+                        if (seqOn) playNotes (wrapStep (n, len), i, juce::jmin (gateSamples, (juce::int64) (stutLen * samplesPerStep * 0.9)), -1, false);
                     }
                 }
                 stutLastO = o;
@@ -987,6 +1080,13 @@ void TrossSeqProcessor::getStateInformation (juce::MemoryBlock& destData)
             st.add (hex);
         }
         if (anyStyle) pats.setProperty ("fstyle" + juce::String (s), st.joinIntoString (" "), nullptr);
+        juce::StringArray lk;   // parameter locks: "lane.step.param=value"
+        for (int t = 0; t < kNumTracks; ++t)
+            for (int k = 0; k < kNumSteps; ++k)
+                for (int p = 0; p < kNumLockParams; ++p)
+                    if (patterns.isLocked (s, t, k, p))
+                        lk.add (juce::String (t) + "." + juce::String (k) + "." + juce::String (p) + "=" + juce::String (patterns.getLock (s, t, k, p)));
+        if (! lk.isEmpty()) pats.setProperty ("locks" + juce::String (s), lk.joinIntoString (" "), nullptr);
     }
     state.removeChild (state.getChildWithName ("MAP"), nullptr);
     state.appendChild (mapToTree(), nullptr);
@@ -1022,6 +1122,17 @@ void TrossSeqProcessor::setStateInformation (const void* data, int sizeInBytes)
                 for (int k = 0; k < kNumSteps; ++k)
                     patterns.setFlamStyle (s, r, k, (uint8_t) (r < st.size() && st[r].length() >= 2 * kNumSteps
                                                                    ? st[r].substring (2 * k, 2 * k + 2).getHexValue32() & 0xff : 0));
+            patterns.clearLocks (s);
+            juce::StringArray lk;
+            lk.addTokens (pats.getProperty ("locks" + juce::String (s)).toString(), " ", "");
+            for (auto& e : lk)
+            {
+                juce::StringArray f; f.addTokens (e.replaceCharacter ('=', '.'), ".", "");
+                if (f.size() != 4) continue;
+                const int t = f[0].getIntValue(), k = f[1].getIntValue(), p = f[2].getIntValue();
+                if (t >= 0 && t < kNumTracks && k >= 0 && k < kNumSteps && p >= 0 && p < kNumLockParams)
+                    patterns.setLock (s, t, k, p, (int16_t) f[3].getIntValue());
+            }
         }
         state.removeChild (pats, nullptr);
     }

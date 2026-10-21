@@ -84,7 +84,7 @@
     <div class="sub">16-STEP MIDI DRUM SEQUENCER &nbsp;·&nbsp; USER MANUAL</div>
   </div>
   <div class="shot"><img src="panel.png" alt="TRoss Seq panel"></div>
-  <div class="meta"><span><b>Version 0.9.2</b> &nbsp;·&nbsp; AU / VST3</span><span>Ticco Ross · 2026</span></div>
+  <div class="meta"><span><b>Version 0.9.3</b> &nbsp;·&nbsp; AU / VST3</span><span>Ticco Ross · 2026</span></div>
 </div>
 
 <!-- ============================================================ contents -->
@@ -130,7 +130,7 @@
   <h2><span class="n">2</span>Installing</h2>
   <h3>macOS</h3>
   <ol class="steps">
-    <li>Open <b>TRossSeq-0.9.2-macOS.pkg</b> (the manual is in the same download).</li>
+    <li>Open <b>TRossSeq-0.9.3-macOS.pkg</b> (the manual is in the same download).</li>
     <li>The installer isn't signed, so the first time macOS blocks it. Open <b>System Settings → Privacy &amp; Security</b>, scroll down and click <b>Open Anyway</b>, then open the .pkg again.</li>
     <li>Follow the installer. It puts the Audio Unit in <code>/Library/Audio/Plug-Ins/Components</code> and the VST3 in <code>/Library/Audio/Plug-Ins/VST3</code>. Click <b>Customize</b> to install only one of them.</li>
     <li>In Ableton Live, open <b>Settings → Plug-Ins</b>, check that Audio Units (and/or VST3) are switched on, then hold <span class="mod">Option</span> and click <b>Rescan</b>.</li>
@@ -138,7 +138,7 @@
   <p>Logic and other Audio Unit hosts find it under <b>AU Instruments → Ticco Ross</b>; Live and Bitwig under <b>VST3 → Ticco Ross</b>. Section 3 has the setup for each.</p>
 
   <h3>Windows</h3>
-  <p>Run <b>TRossSeq-0.9.2-Windows-Setup.exe</b>. If SmartScreen appears, click <b>More info → Run anyway</b>. The VST3 goes to <code>C:\Program Files\Common Files\VST3</code>. Rescan plug-ins in your DAW.</p>
+  <p>Run <b>TRossSeq-0.9.3-Windows-Setup.exe</b>. If SmartScreen appears, click <b>More info → Run anyway</b>. The VST3 goes to <code>C:\Program Files\Common Files\VST3</code>. Rescan plug-ins in your DAW.</p>
 
   <h3>Linux</h3>
   <p>Unpack the <code>.tar.gz</code> and run <code>./install.sh</code>. It copies the VST3 to <code>~/.vst3</code> and the LV2 to <code>~/.lv2</code>, with no root needed. <code>./uninstall.sh</code> removes them.</p>
@@ -201,12 +201,12 @@
 <!-- ============================================================ panel -->
 <section>
   <h2><span class="n">4</span>The panel at a glance</h2>
-  <figure><img src="panel.png" alt="TRoss Seq panel"><figcaption>TRoss Seq 0.9.2. The window can be resized from its bottom-right corner.</figcaption></figure>
+  <figure><img src="panel.png" alt="TRoss Seq panel"><figcaption>TRoss Seq 0.9.3. The window can be resized from its bottom-right corner.</figcaption></figure>
   <div class="areas">
     <div class="area"><h4><span>A</span>Feel</h4><p>VELOCITY, ACCENT, GATE, SWING, FLAM and FLAM LVL knobs (section 11). Turn a knob to see its value; double-click resets it.</p></div>
     <div class="area"><h4><span>B</span>MIDI output</h4><p>MIDI OUT PORT selector and status line, HOST OUT, CLOCK OUT, MIDI THRU and PORT DELAY (section 5).</p></div>
     <div class="area"><h4><span>C</span>Drum map</h4><p>PRESETS: built-in maps and your own saved maps. The line below shows the current map, with <b>* EDITED</b> when it has changed (section 6).</p></div>
-    <div class="area"><h4><span>D</span>Display</h4><p>Shows the playing pattern and what's queued next. In a DAW TRoss Seq follows the host's transport and tempo.</p></div>
+    <div class="area"><h4><span>D</span>Display</h4><p>Shows the playing pattern and what's queued next. In a DAW TRoss Seq follows the host's transport and tempo. Under it, <b>STEPS</b> and <b>LOCKS</b> switch the sequencer zone between the step grid and the parameter locks page (section 8).</p></div>
     <div class="area"><h4><span>E</span>Lanes</h4><p>Name strips (play, rename, lock), step pads, and per lane NOTE, CH, M (mute), S (solo) and LEARN.</p></div>
     <div class="area"><h4><span>F</span>Patterns &amp; transport</h4><p>12 pattern buttons, LENGTH, RUN, CLEAR, REC and EXPORT MIDI.</p></div>
     <div class="area"><h4><span>G</span>Randomiser</h4><p>DENSITY, RANDOM STYLE, and the RANDOM, FILL and UNDO keys (section 12).</p></div>
@@ -370,6 +370,43 @@
   </table>
   <p>TRoss Seq always follows the DAW: it starts, stops, loops and jumps with the transport, and step 1 falls on the downbeat of each bar. When the transport stops, any note still held gets its note-off.</p>
 
+  <h3>Parameter locks (the LOCKS page)</h3>
+  <p>A parameter lock gives <b>one step of one lane its own value</b>, instead of the knob's. Click <span class="key">LOCKS</span> under the display (top right) and the sequencer zone shows the lock page; <span class="key">STEPS</span> brings the step grid back. Both pages show the playing pattern.</p>
+  <figure><img src="locks.png" alt="The LOCKS page"><figcaption>The LOCKS page: lane CH, VELOCITY locks on every other step.</figcaption></figure>
+  <ol class="steps">
+    <li><b>Pick a lane</b> with the names on the left. A lit dot next to a name means that lane has locks in this pattern.</li>
+    <li><b>Pick a parameter</b> on the right.</li>
+    <li><b>Set values with the 16 tall bars</b>, one per step: drag a bar up or down, or drag across several bars to draw a shape (a hi-hat velocity ramp, say). Hold <span class="mod">Shift</span> while dragging for fine steps.</li>
+  </ol>
+  <p>A <b>bright orange</b> bar is a locked step; its value is in the display under it. A <b>dark</b> bar (display "-") has no lock and plays at the knob's value, shown by the dashed line. Each bar's cap has the colour of its group of four pads, as on the step grid. Steps that are switched off are drawn dimmer, but you can lock them in advance. The display on the right shows the lane, step and value you're touching.</p>
+  <table>
+    <tr><th>Parameter</th><th>Range</th><th>What the lock does</th></tr>
+    <tr><td>VELOCITY</td><td>1–127</td><td>How hard the step plays. Replaces the VELOCITY knob, and the ACCENT velocity on accented steps.</td></tr>
+    <tr><td>GATE</td><td>5–95 %</td><td>How long the note is held, as part of a 16th note.</td></tr>
+    <tr><td>NUDGE</td><td>±50 %</td><td>Micro-timing: moves the hit up to half a step later (up) or earlier (down). Drawn from the centre line.</td></tr>
+    <tr><td>CHANCE</td><td>0–100 %</td><td>The probability that the step plays at all. Rolled again every time the step comes round, so a pattern changes from bar to bar.</td></tr>
+    <tr><td>RATCHET</td><td>1–4</td><td>The step plays 2, 3 or 4 fast hits spread over its length (shown as slim bars).</td></tr>
+    <tr><td>PITCH</td><td>±12</td><td>Plays a different note: the lane's note plus that many semitones. For tuned toms, or a different sound on drum boxes that put sounds on neighbouring notes.</td></tr>
+    <tr><td>CC 1 – CC 4</td><td>0–127</td><td>Sends a MIDI CC value just before the step's note, on the lane's channel. Four CCs, so four different controls of your drum box (tune, decay, cutoff…) can be sequenced at once.</td></tr>
+  </table>
+  <h3>Choosing the CC numbers</h3>
+  <p>Next to each CC button is a small display with its CC number (for example <span class="lcd">74 CUTOFF</span>). The numbers are set <b>per lane</b>, because drum boxes usually have a control per drum, and they are saved with the drum map. To change one:</p>
+  <ul>
+    <li><b>Click</b> the display: a menu with common CCs by name and a <b>Number</b> sub-menu with all 128.</li>
+    <li><b>Drag</b> it up or down to step through the numbers.</li>
+    <li><b>Double-click</b> it to type the number. Empty = not used.</li>
+  </ul>
+  <p>A CC showing <span class="lcd">--</span> isn't used: it sends nothing, and its bars can't be set until you pick a number. Look up the numbers in your drum box's MIDI implementation chart.</p>
+  <table>
+    <tr><th>Action on the bars</th><th>Result</th></tr>
+    <tr><td>Drag up / down</td><td>Locks the step to that value.</td></tr>
+    <tr><td>Drag across</td><td>Draws locks on every step you pass.</td></tr>
+    <tr><td><span class="mod">Shift</span>-drag</td><td>Fine adjustment, starting from the current value.</td></tr>
+    <tr><td>Double-click</td><td>Removes the lock: the step follows the knob again.</td></tr>
+    <tr><td>Right-click</td><td>Clear this parameter on the lane, all locks on the lane, or all locks in the pattern.</td></tr>
+  </table>
+  <p>Locks belong to the pattern: they are saved with the project, copied with <b>Copy to</b>, cleared by CLEAR and by <b>Clear this lane</b>, and taken back by UNDO. RANDOM and FILL leave them alone. During a STUTTER the repeats use velocity, gate, pitch, ratchet, CC and chance locks, but not nudge. EXPORT MIDI writes velocity, gate, pitch, nudge, ratchet and CC locks into the clip; chance can't be written into a clip, so the steps are written as always playing (except those at 0 %).</p>
+
   <section class="flow">
     <h2><span class="n">9</span>Recording from a keyboard or pads</h2>
     <p>With <span class="key rec">REC</span> on (it is by default) and the song playing, every incoming note that matches a lane is written into the nearest step of the playing pattern. Swing is taken into account.</p>
@@ -532,6 +569,7 @@
     <tr><td></td><td>Alt / Option-click: lock</td></tr>
     <tr><td></td><td>Right-click: clear lane, learn…</td></tr>
     <tr><td>ACCENT label</td><td>Right-click: clear accent row</td></tr>
+    <tr><td>STEPS / LOCKS</td><td>Step grid / parameter locks page</td></tr>
     <tr><td>FILL</td><td>Click: random fill · Shift-click, then a pattern: TR-808 fill (plays once)</td></tr>
     <tr><td>STUTTER</td><td>Hold: beat repeat · length 1/2 bar … 1/32 · ROLL: shorter every two repeats</td></tr>
     <tr><td>M</td><td>Click: mute · Shift + hold: solo while held</td></tr>
