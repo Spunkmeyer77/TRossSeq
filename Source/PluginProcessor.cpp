@@ -48,6 +48,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TrossSeqProcessor::createLay
         l.add (onOff ("mute" + juce::String (t + 1), "Track " + juce::String (t + 1) + " Mute", false));
     for (int t = 0; t < kNumTracks; ++t)
         l.add (onOff ("solo" + juce::String (t + 1), "Track " + juce::String (t + 1) + " Solo", false));
+    for (int t = 0; t < kNumTracks; ++t)
+        for (int k = 0; k < 4; ++k)
+            l.add (std::make_unique<API> (juce::ParameterID { ccBaseId (t, k), 1 },
+                                          "Lane " + juce::String (t + 1) + " CC " + juce::String (k + 1) + " Base", 0, 127, 64));
     l.add (onOff ("stutter", "Stutter", false));
     l.add (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "sturate", 1 }, "Stutter Length",
                                                          juce::StringArray { "1/2 bar", "1/4", "1/8", "1/16", "1/32" }, 2));
@@ -65,6 +69,9 @@ TrossSeqProcessor::TrossSeqProcessor()
     raw.velocity = p ("velocity"); raw.accentVel = p ("accvel"); raw.gate = p ("gate"); raw.swing = p ("swing");
     raw.thru = p ("thru"); raw.hostOut = p ("hostout"); raw.clockOut = p ("clockout"); raw.offset = p ("offset");
     raw.density = p ("density"); raw.rstyle = p ("rstyle"); raw.flamTime = p ("flamtime"); raw.flamLevel = p ("flamlevel");
+    for (int t = 0; t < kNumTracks; ++t)
+        for (int k = 0; k < 4; ++k) { raw.ccBase[t][k] = p (ccBaseId (t, k)); ccSentNum[t][k] = -1; ccBaseSeen[t][k] = -1; }
+    forgetSentCcs();
     raw.stutter = p ("stutter"); raw.stutRate = p ("sturate"); raw.stutRoll = p ("sturoll");
 
     applyPreset (0);
@@ -130,6 +137,7 @@ void TrossSeqProcessor::prepareToPlay (double sr, int samplesPerBlock)
 void TrossSeqProcessor::applyPreset (int i)
 {
     map.setPreset (i);
+    for (int t = 0; t < kNumTracks; ++t) for (int k = 0; k < 4; ++k) setCcBase (t, k, 64);
     const auto& p = TrackMap::preset (i);
     {
         const juce::ScopedLock sl (nameLock);
@@ -166,7 +174,8 @@ juce::String TrossSeqProcessor::mapSignature() const
     juce::String sig;
     for (int t = 0; t < kNumTracks; ++t)
         sig << getTrackName (t) << '|' << map.note (t) << '|' << map.channel (t) << '|' << (locked[t].load() ? 1 : 0)
-            << '|' << map.ccNumber (t, 0) << ',' << map.ccNumber (t, 1) << ',' << map.ccNumber (t, 2) << ',' << map.ccNumber (t, 3) << ';';
+            << '|' << map.ccNumber (t, 0) << ',' << map.ccNumber (t, 1) << ',' << map.ccNumber (t, 2) << ',' << map.ccNumber (t, 3)
+            << '|' << ccBase (t, 0) << ',' << ccBase (t, 1) << ',' << ccBase (t, 2) << ',' << ccBase (t, 3) << ';';
     return sig;
 }
 
@@ -238,6 +247,8 @@ juce::ValueTree TrossSeqProcessor::mapToTree() const
         tr.setProperty ("locked", locked[i].load(), nullptr);
         tr.setProperty ("cc", juce::String (map.ccNumber (i, 0)) + " " + juce::String (map.ccNumber (i, 1)) + " "
                               + juce::String (map.ccNumber (i, 2)) + " " + juce::String (map.ccNumber (i, 3)), nullptr);
+        tr.setProperty ("ccbase", juce::String (ccBase (i, 0)) + " " + juce::String (ccBase (i, 1)) + " "
+                                  + juce::String (ccBase (i, 2)) + " " + juce::String (ccBase (i, 3)), nullptr);
         t.appendChild (tr, nullptr);
     }
     return t;
@@ -256,6 +267,8 @@ void TrossSeqProcessor::mapFromTree (const juce::ValueTree& t)
         locked[i] = (bool) tr.getProperty ("locked", false);
         juce::StringArray cc; cc.addTokens (tr.getProperty ("cc", "-1 -1 -1 -1").toString(), " ", "");
         for (int k = 0; k < 4; ++k) map.setCcNumber (i, k, k < cc.size() ? cc[k].getIntValue() : -1);
+        juce::StringArray cb; cb.addTokens (tr.getProperty ("ccbase", "64 64 64 64").toString(), " ", "");
+        for (int k = 0; k < 4; ++k) setCcBase (i, k, k < cb.size() ? cb[k].getIntValue() : 64);
     }
     if (t.hasProperty ("mapName"))   // which map this is, and how it looked when picked (for the * mark)
     {
@@ -264,6 +277,16 @@ void TrossSeqProcessor::mapFromTree (const juce::ValueTree& t)
     }
     else
         setMapIdentity ({});   // older projects: an unnamed map
+}
+
+void TrossSeqProcessor::setCcBase (int t, int k, int v)
+{
+    if (auto* p = apvts.getParameter (ccBaseId (t, k)))
+    {
+        p->beginChangeGesture();
+        p->setValueNotifyingHost (p->convertTo0to1 ((float) juce::jlimit (0, 127, v)));
+        p->endChangeGesture();
+    }
 }
 
 void TrossSeqProcessor::saveAsDefault()
@@ -685,10 +708,20 @@ void TrossSeqProcessor::playTrack (int slot, int step, int t, int sample, juce::
     if (const auto g = lock (kLockGate); g != kNoLock) gateSamples = (juce::int64) std::round (g / 100.0 * curSamplesPerStep);
     const int pitch = lock (kLockPitch) != kNoLock ? lock (kLockPitch) : 0;
     const int ch = map.channel (t);
-    for (int k = 0; k < 4; ++k)   // CC locks go out just before the note
+    // CCs, Elektron style: a locked step sends its value, an unlocked step puts the lane's base value back.
+    // Only sent when it differs from what the drum box last got, so lanes without locks send nothing extra.
+    for (int k = 0; k < 4; ++k)
         if (const int n = map.ccNumber (t, k); n >= 0)
-            if (const auto v = lock (kLockCC1 + k); v != kNoLock)
-                emit (juce::MidiMessage::controllerEvent (ch, n, juce::jlimit (0, 127, (int) v)), sample, true, hostSample);
+        {
+            const auto lv = lock (kLockCC1 + k);
+            const int v = juce::jlimit (0, 127, lv != kNoLock ? (int) lv : ccBase (t, k));
+            if (ccSentNum[t][k] != n) { ccSentNum[t][k] = n; ccSentVal[t][k] = -1; }
+            if (v != ccSentVal[t][k])
+            {
+                emit (juce::MidiMessage::controllerEvent (ch, n, v), sample, true, hostSample);
+                ccSentVal[t][k] = v;
+            }
+        }
     const int hits = lock (kLockRatchet) != kNoLock ? juce::jlimit (1, 4, (int) lock (kLockRatchet)) : 1;
     if (hits > 1)
     {
@@ -906,6 +939,25 @@ void TrossSeqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Mi
             directOut.push (juce::MidiMessage::midiContinue(), t);
         }
         lastClockTick = (juce::int64) std::ceil (ppq * 24.0 - 1e-9) - 1;
+    }
+
+    // ---- CC base values: sent once when the song starts, and straight away when one is moved (like a knob)
+    {
+        const bool starting = playing && ! wasPlaying;
+        for (int t = 0; t < kNumTracks; ++t)
+            for (int k = 0; k < 4; ++k)
+            {
+                const int n = map.ccNumber (t, k), b = ccBase (t, k);
+                const bool moved = ccBaseSeen[t][k] >= 0 && b != ccBaseSeen[t][k];
+                ccBaseSeen[t][k] = b;
+                if (n < 0) continue;
+                if (ccSentNum[t][k] != n) { ccSentNum[t][k] = n; ccSentVal[t][k] = -1; }
+                if (starting || (moved && ccSentVal[t][k] != b))   // the start always sends: every pass begins from the same sound
+                {
+                    emit (juce::MidiMessage::controllerEvent (map.channel (t), n, b), 0, false);
+                    ccSentVal[t][k] = b;
+                }
+            }
     }
 
     // ---- run through the block: steps, clock ticks and incoming MIDI in time order

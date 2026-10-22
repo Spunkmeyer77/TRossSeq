@@ -151,6 +151,7 @@ public:
     static juce::Rectangle<float> barRect (int step);
     static juce::Rectangle<float> paramRect (int p);       // VELOCITY..PITCH, and the CC 1..4 buttons
     static juce::Rectangle<float> ccDisplayRect (int k);
+    juce::Rectangle<float> baseHandleRect() const;        // the CC's BASE tag on the dashed line (CC parameters only)
     int valueAt (float y) const;                           // bar y -> value of the current parameter
     int unlockedValue (int step) const;                    // what a step without a lock plays
     static juce::String ccLabel (int number);
@@ -161,7 +162,7 @@ private:
     int dragStep = -1, ccDrag = -1, ccStartNum = -1;
     float dragStartY = 0.0f;
     int fineStartValue = 0;
-    bool ccMoved = false, barDrag = false;
+    bool ccMoved = false, barDrag = false, baseDrag = false;
 };
 
 // Amber read-out: playing pattern, and the queued one

@@ -1010,13 +1010,27 @@ int main (int argc, char** argv)
                 ++idx;
             }
             int lastCc = -1; idx = 0; for (auto& e : ev) { if (e.m.isController()) lastCc = idx; ++idx; }
-            check (cc == std::vector<juce::String> { "74=99@24000", "71=12@24000" } && lastCc < noteAt5 && ev[(size_t) lastCc].m.getChannel() == 10,
-                   "CC 1 (74) and CC 3 (71) sent on step 5, just before the note, on the lane's channel");
+            juce::String all; for (auto& c2 : cc) all << c2 << " ";
+            int lastBefore5 = -1; idx = 0; for (auto& e : ev) { if (e.m.isController() && e.t == 24000) lastBefore5 = idx; ++idx; }
+            check (cc == std::vector<juce::String> { "74=64@0", "71=64@0", "74=99@24000", "71=12@24000", "74=64@48000", "71=64@48000" }
+                   && lastBefore5 < noteAt5 && ev[(size_t) lastBefore5].m.getChannel() == 10,
+                   "CCs: bases at the start, locks on step 5 (before the note), back to base on step 9, nothing else (" + all.trim() + ")");
+        }
+        {   // moving a base sends it at once, even with the song stopped; the next pass starts from it
+            h7.playing = false; { juce::MidiBuffer m; lp.processBlock (b7, m); }
+            lp.setCcBase (0, 0, 20);
+            juce::MidiBuffer m; lp.processBlock (b7, m);
+            int got = -1; for (const auto md : m) if (md.getMessage().isController() && md.getMessage().getControllerNumber() == 74) got = md.getMessage().getControllerValue();
+            check (got == 20, "moving CC 1's base sends 74=20 straight away");
+            bar();
+            std::vector<juce::String> cc;
+            for (auto& e : ev) if (e.m.isController() && e.m.getControllerNumber() == 74) cc.push_back (juce::String (e.m.getControllerValue()) + "@" + juce::String ((int) e.t));
+            check (cc == std::vector<juce::String> { "20@0", "99@24000", "20@48000" }, "the lock returns to the new base on the next step");
         }
         lp.patterns.setLock (0, 0, 4, kLockVel, 50);
         juce::MemoryBlock mb; lp.getStateInformation (mb);
         TrossSeqProcessor lr; lr.setStateInformation (mb.getData(), (int) mb.getSize());
-        check (lr.patterns.getLock (0, 0, 4, kLockVel) == 50 && lr.patterns.getLock (0, 0, 4, kLockCC1) == 99 && lr.map.ccNumber (0, 0) == 74
+        check (lr.patterns.getLock (0, 0, 4, kLockVel) == 50 && lr.patterns.getLock (0, 0, 4, kLockCC1) == 99 && lr.map.ccNumber (0, 0) == 74 && lr.ccBase (0, 0) == 20
                && ! lr.patterns.isLocked (0, 0, 5, kLockVel), "locks and CC numbers saved with the project");
         lp.patterns.copySlot (0, 3);
         check (lp.patterns.getLock (3, 0, 4, kLockVel) == 50, "copying a pattern copies its locks");
@@ -1347,6 +1361,24 @@ int main (int argc, char** argv)
         auto img = ed->createComponentSnapshot (ed->getLocalBounds(), true, 2.0f);
         auto f = outDir.getChildFile ("locks_2x.png"); f.deleteFile();
         if (auto os = f.createOutputStream()) juce::PNGImageFormat().writeImageToStream (img, *os);
+        {   // CC page: drag the BASE tag up
+            lpg.param = kLockCC1;
+            proc.setCcBase (5, 0, 64);
+            proc.patterns.clearLocks (sl, 5, kLockCC1);
+            for (int s2 : { 2, 6, 10, 14 }) proc.patterns.setLock (sl, 5, s2, kLockCC1, (int16_t) (100 + s2));
+            const auto h = lpg.baseHandleRect();
+            lpg.mouseDown (mev (h.getCentre(), left));
+            lpg.mouseDrag (mev (h.getCentre().translated (0.0f, -30.0f), left));
+            lpg.mouseUp (mev (h.getCentre().translated (0.0f, -30.0f), left));
+            check (! h.isEmpty() && proc.ccBase (5, 0) > 64 && ! proc.patterns.isLocked (sl, 5, 15, kLockCC1),
+                   "drag the BASE tag: CC 1's base goes up (" + juce::String (proc.ccBase (5, 0)) + "), no step gets locked");
+            proc.setCcBase (5, 0, 50);
+            lpg.touched = 6;
+            auto img2 = ed->createComponentSnapshot (ed->getLocalBounds(), true, 2.0f);
+            auto f2 = outDir.getChildFile ("locks_cc_2x.png"); f2.deleteFile();
+            if (auto os = f2.createOutputStream()) juce::PNGImageFormat().writeImageToStream (img2, *os);
+            lpg.param = kLockVel;
+        }
         te->stepsBtn.onClick();
         check (! te->isLockMode() && ! te->lockPage.isVisible(), "STEPS key: back to the grid");
     }

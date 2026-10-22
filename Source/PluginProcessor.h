@@ -222,6 +222,7 @@ private:
     {
         std::atomic<float>* mute[trossseq::kNumTracks];
         std::atomic<float>* solo[trossseq::kNumTracks];
+        std::atomic<float>* ccBase[trossseq::kNumTracks][4];   // each lane's CC track values (Elektron style)
         std::atomic<float> *seqOn, *seqLen, *pattern, *rec, *velocity, *accentVel, *gate, *swing,
                            *thru, *hostOut, *clockOut, *offset, *density, *rstyle, *flamTime, *flamLevel, *stutter, *stutRate, *stutRoll;
     } raw {};
@@ -233,6 +234,14 @@ private:
     void doGrace (int step, long long absStep, int len, int sample, juce::int64 lookSamples);
     void playNotes (int step, int sample, juce::int64 gateSamples, juce::int64 hostSample, bool skipNudged = true);
     void playTrack (int slot, int step, int track, int sample, juce::int64 gateSamples, juce::int64 hostSample);
+    // what the drum box was last sent per lane and CC (-1 = unknown), so CCs only go out when they change
+    int ccSentVal[trossseq::kNumTracks][4], ccSentNum[trossseq::kNumTracks][4], ccBaseSeen[trossseq::kNumTracks][4];
+    void forgetSentCcs() { for (auto& a : ccSentVal) for (auto& v : a) v = -1; }
+public:
+    static juce::String ccBaseId (int track, int k) { return "ccbase" + juce::String (track + 1) + "_" + juce::String (k + 1); }
+    int ccBase (int track, int k) const { return (int) raw.ccBase[track][k]->load(); }
+    void setCcBase (int track, int k, int v);   // message thread
+private:
     int  slotForStep (long long absStep, int len) const;   // the pattern that will play at absStep (for look-ahead)
     double curSamplesPerStep = 6000.0;
     trossseq::StepClock nudgeClock;

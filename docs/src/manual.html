@@ -84,7 +84,7 @@
     <div class="sub">16-STEP MIDI DRUM SEQUENCER &nbsp;·&nbsp; USER MANUAL</div>
   </div>
   <div class="shot"><img src="panel.png" alt="TRoss Seq panel"></div>
-  <div class="meta"><span><b>Version 0.9.3</b> &nbsp;·&nbsp; AU / VST3</span><span>Ticco Ross · 2026</span></div>
+  <div class="meta"><span><b>Version 0.9.4</b> &nbsp;·&nbsp; AU / VST3</span><span>Ticco Ross · 2026</span></div>
 </div>
 
 <!-- ============================================================ contents -->
@@ -130,7 +130,7 @@
   <h2><span class="n">2</span>Installing</h2>
   <h3>macOS</h3>
   <ol class="steps">
-    <li>Open <b>TRossSeq-0.9.3-macOS.pkg</b> (the manual is in the same download).</li>
+    <li>Open <b>TRossSeq-0.9.4-macOS.pkg</b> (the manual is in the same download).</li>
     <li>The installer isn't signed, so the first time macOS blocks it. Open <b>System Settings → Privacy &amp; Security</b>, scroll down and click <b>Open Anyway</b>, then open the .pkg again.</li>
     <li>Follow the installer. It puts the Audio Unit in <code>/Library/Audio/Plug-Ins/Components</code> and the VST3 in <code>/Library/Audio/Plug-Ins/VST3</code>. Click <b>Customize</b> to install only one of them.</li>
     <li>In Ableton Live, open <b>Settings → Plug-Ins</b>, check that Audio Units (and/or VST3) are switched on, then hold <span class="mod">Option</span> and click <b>Rescan</b>.</li>
@@ -138,7 +138,7 @@
   <p>Logic and other Audio Unit hosts find it under <b>AU Instruments → Ticco Ross</b>; Live and Bitwig under <b>VST3 → Ticco Ross</b>. Section 3 has the setup for each.</p>
 
   <h3>Windows</h3>
-  <p>Run <b>TRossSeq-0.9.3-Windows-Setup.exe</b>. If SmartScreen appears, click <b>More info → Run anyway</b>. The VST3 goes to <code>C:\Program Files\Common Files\VST3</code>. Rescan plug-ins in your DAW.</p>
+  <p>Run <b>TRossSeq-0.9.4-Windows-Setup.exe</b>. If SmartScreen appears, click <b>More info → Run anyway</b>. The VST3 goes to <code>C:\Program Files\Common Files\VST3</code>. Rescan plug-ins in your DAW.</p>
 
   <h3>Linux</h3>
   <p>Unpack the <code>.tar.gz</code> and run <code>./install.sh</code>. It copies the VST3 to <code>~/.vst3</code> and the LV2 to <code>~/.lv2</code>, with no root needed. <code>./uninstall.sh</code> removes them.</p>
@@ -201,7 +201,7 @@
 <!-- ============================================================ panel -->
 <section>
   <h2><span class="n">4</span>The panel at a glance</h2>
-  <figure><img src="panel.png" alt="TRoss Seq panel"><figcaption>TRoss Seq 0.9.3. The window can be resized from its bottom-right corner.</figcaption></figure>
+  <figure><img src="panel.png" alt="TRoss Seq panel"><figcaption>TRoss Seq 0.9.4. The window can be resized from its bottom-right corner.</figcaption></figure>
   <div class="areas">
     <div class="area"><h4><span>A</span>Feel</h4><p>VELOCITY, ACCENT, GATE, SWING, FLAM and FLAM LVL knobs (section 11). Turn a knob to see its value; double-click resets it.</p></div>
     <div class="area"><h4><span>B</span>MIDI output</h4><p>MIDI OUT PORT selector and status line, HOST OUT, CLOCK OUT, MIDI THRU and PORT DELAY (section 5).</p></div>
@@ -387,7 +387,7 @@
     <tr><td>CHANCE</td><td>0–100 %</td><td>The probability that the step plays at all. Rolled again every time the step comes round, so a pattern changes from bar to bar.</td></tr>
     <tr><td>RATCHET</td><td>1–4</td><td>The step plays 2, 3 or 4 fast hits spread over its length (shown as slim bars).</td></tr>
     <tr><td>PITCH</td><td>±12</td><td>Plays a different note: the lane's note plus that many semitones. For tuned toms, or a different sound on drum boxes that put sounds on neighbouring notes.</td></tr>
-    <tr><td>CC 1 – CC 4</td><td>0–127</td><td>Sends a MIDI CC value just before the step's note, on the lane's channel. Four CCs, so four different controls of your drum box (tune, decay, cutoff…) can be sequenced at once.</td></tr>
+    <tr><td>CC 1 – CC 4</td><td>0–127</td><td>Sends a MIDI CC value just before the step's note, on the lane's channel. Four CCs, so four different controls of your drum box (tune, decay, cutoff…) can be sequenced at once. The next step without a lock puts the CC back to its BASE value (see below).</td></tr>
   </table>
   <h3>Choosing the CC numbers</h3>
   <p>Next to each CC button is a small display with its CC number (for example <span class="lcd">74 CUTOFF</span>). The numbers are set <b>per lane</b>, because drum boxes usually have a control per drum, and they are saved with the drum map. To change one:</p>
@@ -397,6 +397,18 @@
     <li><b>Double-click</b> it to type the number. Empty = not used.</li>
   </ul>
   <p>A CC showing <span class="lcd">--</span> isn't used: it sends nothing, and its bars can't be set until you pick a number. Look up the numbers in your drum box's MIDI implementation chart.</p>
+  <h3>BASE: the CC's normal value (Elektron style)</h3>
+  <p>A CC changes a knob on the drum box, and the knob stays there until something moves it again. So TR Seq keeps a <b>BASE</b> value for every lane's CC 1–4, like the knob position on an Elektron track. A locked step sends its own value; the <b>next step without a lock puts the BASE value back</b>, so the change lasts exactly one step.</p>
+  <figure><img src="locks_cc.png" alt="CC 1 with its BASE line"><figcaption>CC 1 (74 CUTOFF) on lane CH: four locked steps above the BASE line at 50.</figcaption></figure>
+  <ul>
+    <li>When a CC parameter is picked, the BASE is the orange dashed line across the bars, with its value in the <span class="lcd">BASE 50</span> tag at the right. <b>Drag the tag</b> up or down to move it (<span class="mod">Shift</span> for fine steps), or <b>double-click</b> it to type a value. Unlocked steps are drawn at the BASE.</li>
+    <li>Moving the BASE sends the new value to the drum box straight away, even with the song stopped, like turning the knob on the machine.</li>
+    <li>When the song starts, TR Seq sends every BASE once, so each pass starts from the same sound.</li>
+    <li>A CC is only sent when its value changes: a lane without locks sends nothing extra, and a run of steps locked to the same value sends it once.</li>
+    <li>Each BASE is also a DAW parameter (<i>Lane 1 CC 1 Base</i> … <i>Lane 13 CC 4 Base</i>), so you can automate it or map a controller to it. To make a change that lasts, move the BASE (live or with automation) rather than locking every step.</li>
+    <li>BASE values are saved with the project and with the drum map. Picking a built-in map sets them all to 64.</li>
+  </ul>
+  <p class="note"><b>Tip.</b> Once a sound's control is on TR Seq, adjust it from TR Seq rather than from the drum box's own knob: on the next unlocked step TR Seq puts its BASE back. Set the BASE to where you like the sound (for a TR-08 tune knob in the middle, try 64).</p>
   <table>
     <tr><th>Action on the bars</th><th>Result</th></tr>
     <tr><td>Drag up / down</td><td>Locks the step to that value.</td></tr>
@@ -589,7 +601,7 @@
   </div>
 
   <h3>Automatable parameters</h3>
-  <p>Run · Length · Pattern · Record · Velocity · Accent Velocity · Gate · Swing · Flam Time · Flam Level · Port Delay · MIDI Thru · Host Out · Clock Out · Random Density · Random Style · Track 1–13 Mute · Track 1–13 Solo · Stutter · Stutter Length · Stutter Roll</p>
+  <p>Run · Length · Pattern · Record · Velocity · Accent Velocity · Gate · Swing · Flam Time · Flam Level · Port Delay · MIDI Thru · Host Out · Clock Out · Random Density · Random Style · Track 1–13 Mute · Track 1–13 Solo · Lane 1–13 CC 1–4 Base · Stutter · Stutter Length · Stutter Roll</p>
 </section>
 
 <!-- ============================================================ troubleshooting -->

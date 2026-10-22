@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(TRossSeq VERSION 0.9.3)
+project(TRossSeq VERSION 0.9.4)
 
 # shown in the About window
 string(TIMESTAMP TSEQ_BUILD_DATE "%d %b %Y" UTC)
